@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public abstract class WorldObject : MonoBehaviour //나중에 명칭 바꿔야함
+public class AggregateRoot : MonoBehaviour
 {
-
+    //인스턴스 아이디 소유   
 }

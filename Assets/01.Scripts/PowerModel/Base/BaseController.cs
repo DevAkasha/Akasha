@@ -1,8 +1,8 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
-// 모든 컨트롤러의 기본 클래스 (MonoBehaviour 상속)
-public abstract class Controller : MonoBehaviour
+// 모든 컨트롤러의 기본 클래스 (AggregateRoot 상속)
+public abstract class Controller : AggregateRoot
 {
     protected bool isInitialized;
     [SerializeField] protected bool isEnableLifecycle = true;
@@ -33,8 +33,6 @@ public abstract class BaseController<E, M> : MController, IRxCaller where E : Ba
     public override BaseModel GetBaseModel() => Model;
 
     public M GetModel() => Model;
-
-
 
     protected virtual void Start()
     {

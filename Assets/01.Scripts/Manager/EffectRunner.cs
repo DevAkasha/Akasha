@@ -1,12 +1,46 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
-public class EffectRunner : Singleton<EffectRunner>
+public class EffectRunner : ManagerBase
 {
-    private readonly Dictionary<(ModifierKey, IModelOwner), Coroutine> activeEffects = new();
+    public override int InitializationPriority => 15; // EffectManager 다음에 초기화
 
+    private readonly Dictionary<(ModifierKey, IModelOwner), Coroutine> activeEffects = new();
+    private EffectManager effectManager;
+
+    #region Manager Lifecycle
+    protected override void OnManagerAwake()
+    {
+        base.OnManagerAwake();
+        // EffectManager는 우선도가 더 높아서 이미 초기화되어 있음
+        effectManager = GameManager.Effect;
+
+        if (effectManager == null)
+        {
+            Debug.LogError("[EffectRunner] EffectManager not found! EffectRunner requires EffectManager.");
+        }
+    }
+
+    protected override void OnManagerDestroy()
+    {
+        base.OnManagerDestroy();
+        CancelAllEffects();
+    }
+
+    public override void OnSceneUnloaded(Scene scene)
+    {
+        base.OnSceneUnloaded(scene);
+
+        // 씬이 언로드될 때 해당 씬의 객체들과 관련된 효과들 정리
+        CleanupEffectsForScene(scene);
+    }
+    #endregion
+
+    #region Timed Effects
     public void RegisterTimedEffect(ModifierEffect effect, IModelOwner target)
     {
         if (target == null)
@@ -30,30 +64,6 @@ public class EffectRunner : Singleton<EffectRunner>
                 activeEffects[(effect.Key, target)] = coroutine;
             }
         }
-    }
-
-    public void RegisterInterpolatedEffect(ModifierEffect effect, IModelOwner target)
-    {
-        if (target == null)
-        {
-            Debug.LogError("[EffectRunner] Cannot register interpolated effect for null target");
-            return;
-        }
-
-        if (!effect.IsInterpolated)
-        {
-            Debug.LogError($"[EffectRunner] Effect {effect.Key} is not interpolated");
-            return;
-        }
-
-        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
-        if (modifiableTarget == null)
-        {
-            Debug.LogError($"[EffectRunner] Target {target} does not implement IModifiableTarget");
-            return;
-        }
-
-        StartCoroutine(RunInterpolatedEffect(effect, modifiableTarget));
     }
 
     private bool TryStartEffect(ModifierEffect effect, IModelOwner target, out Coroutine coroutine)
@@ -116,6 +126,32 @@ public class EffectRunner : Singleton<EffectRunner>
             yield return new WaitForSeconds(0.2f);
         }
     }
+    #endregion
+
+    #region Interpolated Effects
+    public void RegisterInterpolatedEffect(ModifierEffect effect, IModelOwner target)
+    {
+        if (target == null)
+        {
+            Debug.LogError("[EffectRunner] Cannot register interpolated effect for null target");
+            return;
+        }
+
+        if (!effect.IsInterpolated)
+        {
+            Debug.LogError($"[EffectRunner] Effect {effect.Key} is not interpolated");
+            return;
+        }
+
+        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+        if (modifiableTarget == null)
+        {
+            Debug.LogError($"[EffectRunner] Target {target} does not implement IModifiableTarget");
+            return;
+        }
+
+        StartCoroutine(RunInterpolatedEffect(effect, modifiableTarget));
+    }
 
     private IEnumerator RunInterpolatedEffect(ModifierEffect effect, IModifiableTarget target)
     {
@@ -174,7 +210,9 @@ public class EffectRunner : Singleton<EffectRunner>
 
         Debug.Log($"[EffectRunner] Interpolated effect removed: {key}");
     }
+    #endregion
 
+    #region Effect Control
     public bool CancelEffect(ModifierKey effectKey, IModelOwner target)
     {
         var key = (effectKey, target);
@@ -185,8 +223,7 @@ public class EffectRunner : Singleton<EffectRunner>
             activeEffects.Remove(key);
 
             // 효과 제거
-            var effect = EffectManager.Instance.GetEffect(effectKey);
-            if (effect != null)
+            if (effectManager != null && effectManager.TryGetEffect(effectKey, out var effect))
             {
                 effect.RemoveFrom(target);
                 Debug.Log($"[EffectRunner] <color=orange>Effect CANCELED</color> - {effectKey}");
@@ -212,8 +249,7 @@ public class EffectRunner : Singleton<EffectRunner>
                 StopCoroutine(pair.Value);
 
                 // 효과 제거
-                var effect = EffectManager.Instance.GetEffect(effectKey);
-                if (effect != null)
+                if (effectManager != null && effectManager.TryGetEffect(effectKey, out var effect))
                 {
                     effect.RemoveFrom(target);
                 }
@@ -232,6 +268,52 @@ public class EffectRunner : Singleton<EffectRunner>
         }
     }
 
+    public void CancelAllEffects()
+    {
+        Debug.Log($"[EffectRunner] Canceling all {activeEffects.Count} active effects");
+
+        foreach (var coroutine in activeEffects.Values)
+        {
+            if (coroutine != null)
+            {
+                StopCoroutine(coroutine);
+            }
+        }
+
+        activeEffects.Clear();
+    }
+    #endregion
+
+    #region Scene Cleanup
+    private void CleanupEffectsForScene(Scene scene)
+    {
+        var keysToRemove = new List<(ModifierKey, IModelOwner)>();
+
+        foreach (var pair in activeEffects)
+        {
+            var (effectKey, target) = pair.Key;
+
+            // 대상이 언로드된 씬에 속하는지 확인
+            if (target != null && target is MonoBehaviour mb && mb.gameObject.scene == scene)
+            {
+                keysToRemove.Add(pair.Key);
+                StopCoroutine(pair.Value);
+            }
+        }
+
+        foreach (var key in keysToRemove)
+        {
+            activeEffects.Remove(key);
+        }
+
+        if (keysToRemove.Count > 0)
+        {
+            Debug.Log($"[EffectRunner] Cleaned up {keysToRemove.Count} effects for scene: {scene.name}");
+        }
+    }
+    #endregion
+
+    #region Query & Debug
     public bool HasActiveEffect(ModifierKey effectKey, IModelOwner target)
     {
         return activeEffects.ContainsKey((effectKey, target));
@@ -253,4 +335,40 @@ public class EffectRunner : Singleton<EffectRunner>
 
         return keys;
     }
+
+    public int ActiveEffectCount => activeEffects.Count;
+
+    public Dictionary<ModifierKey, int> GetActiveEffectStats()
+    {
+        var stats = new Dictionary<ModifierKey, int>();
+
+        foreach (var (effectKey, _) in activeEffects.Keys)
+        {
+            stats[effectKey] = stats.GetValueOrDefault(effectKey) + 1;
+        }
+
+        return stats;
+    }
+
+#if UNITY_EDITOR
+    [Header("Debug Info")]
+    [SerializeField, TextArea(3, 10)] private string debugInfo;
+
+    protected override void OnValidate()
+    {
+        base.OnValidate();
+
+        if (Application.isPlaying)
+        {
+            var effectStats = GetActiveEffectStats();
+            var statsText = effectStats.Count > 0
+                ? string.Join("\n", effectStats.Select(kvp => $"{kvp.Key}: {kvp.Value}"))
+                : "No active effects";
+
+            debugInfo = $"Active Effects: {ActiveEffectCount}\n" +
+                       $"Effect Stats:\n{statsText}";
+        }
+    }
+#endif
+    #endregion
 }

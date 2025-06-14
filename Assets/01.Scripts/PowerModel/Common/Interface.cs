@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -54,3 +54,20 @@ public interface IModelOwner<M> : IModelOwner where M : BaseModel // 모델을 �
     public M GetModel(); //현재 모델 반환
 }
 
+
+// 뷰모델 기본 인터페이스
+public interface IViewModel
+{
+    void SetOwner(BaseView owner);
+    void BindToModel(BaseModel model);
+    void Cleanup();
+    Type ModelType { get; }
+}
+
+// 뷰필드 기본 인터페이스
+public interface IViewField
+{
+    void SetOwner(BaseView owner);
+    void SetFieldName(string fieldName);
+    void Cleanup();
+}

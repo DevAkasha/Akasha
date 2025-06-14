@@ -329,8 +329,9 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
     [Header("Debug Info")]
     [SerializeField, TextArea(3, 10)] private string debugInfo;
 
-    private void OnValidate()
+    protected override void OnValidate()
     {
+        base.OnValidate();
         if (Application.isPlaying)
         {
             var poolInfo = GetPoolInfo();

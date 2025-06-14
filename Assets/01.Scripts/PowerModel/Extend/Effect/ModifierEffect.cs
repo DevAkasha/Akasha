@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -129,11 +129,11 @@ public class ModifierEffect : BaseEffect
         {
             if (IsInterpolated)
             {
-                EffectRunner.Instance.RegisterInterpolatedEffect(this, target);
+                GameManager.EffectRunner.RegisterInterpolatedEffect(this, target);
             }
             else
             {
-                EffectRunner.Instance.RegisterTimedEffect(this, target);
+                GameManager.EffectRunner.RegisterTimedEffect(this, target);
             }
         }
     }

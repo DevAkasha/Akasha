@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public abstract class Presenter : AggregateRoot
@@ -8,7 +9,6 @@ public abstract class Presenter : AggregateRoot
     // UIManager에 의해 관리됨
 }
 
-#region BasePresenter
 /// <summary>
 /// 개선된 ViewModel 지원을 위한 BasePresenter 수정
 /// </summary>
@@ -16,7 +16,7 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
 {
     [Header("Presenter Settings")]
     [SerializeField] protected bool enableDebugLogs = false;
-    [SerializeField] protected bool autoRegisterToUIManager = true;
+    [SerializeField] protected bool manualManagerRegistration = false; // 수동 등록 모드
 
     #region IRxOwner, IRxCaller Implementation
     public bool IsRxVarOwner => true;
@@ -154,10 +154,7 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
     }
     #endregion
 
-    #region Model Binding - 개선된 바인딩 지원
-    /// <summary>
-    /// 모든 뷰에 모델 바인딩 (ViewModel과 ViewSlot 모두 지원)
-    /// </summary>
+    #region Model Binding
     protected void BindModelToAllViews(BaseModel model)
     {
         if (model == null)
@@ -172,18 +169,13 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
         }
     }
 
-    /// <summary>
-    /// 특정 뷰에 모델 바인딩
-    /// </summary>
     protected void BindModelToView(BaseView view, BaseModel model)
     {
         if (view == null || model == null) return;
 
-        // 리플렉션을 통해 BindToModel 메서드 찾기
         var bindMethod = view.GetType().GetMethod("BindToModel", new[] { model.GetType() });
         if (bindMethod == null)
         {
-            // BaseModel 타입으로 재시도
             bindMethod = view.GetType().GetMethod("BindToModel", new[] { typeof(BaseModel) });
         }
 
@@ -204,48 +196,31 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
             LogWarning($"View {view.GetType().Name} does not have BindToModel method");
         }
     }
-
-    /// <summary>
-    /// 타입별 모델 바인딩 헬퍼
-    /// </summary>
-    protected void BindModelToViews<TModel>(TModel model) where TModel : BaseModel
-    {
-        if (model == null) return;
-
-        foreach (var view in ownedViews)
-        {
-            // 해당 모델 타입을 받는 BindToModel 메서드가 있는지 확인
-            var bindMethod = view.GetType().GetMethod("BindToModel", new[] { typeof(TModel) });
-            if (bindMethod != null)
-            {
-                try
-                {
-                    bindMethod.Invoke(view, new object[] { model });
-                    LogDebug($"Bound {typeof(TModel).Name} to view {view.GetType().Name}");
-                }
-                catch (Exception ex)
-                {
-                    LogError($"Failed to bind {typeof(TModel).Name} to view {view.GetType().Name}: {ex.Message}");
-                }
-            }
-        }
-    }
     #endregion
 
-    #region Unity Lifecycle
-    protected virtual void Awake()
+    #region Unity Lifecycle - AggregateRoot 통합
+    protected override void Awake()
     {
+        base.Awake(); // AggregateRoot.Awake() 호출
         AtInit();
+    }
 
-        if (autoRegisterToUIManager && GameManager.UI != null)
+    protected override void Start()
+    {
+        base.Start(); // AggregateRoot.Start() 호출 (자동 등록 포함)
+
+        // 수동 등록 모드인 경우에만 수동 등록
+        if (manualManagerRegistration && GameManager.UI != null)
         {
-            GameManager.UI.Register(this);
-            LogDebug("Auto-registered to UIManager");
+            GameManager.UI.RegisterWithAutoMetadata(this);
+            LogDebug("Manual registration to UIManager completed");
         }
     }
 
-    protected virtual void OnDestroy()
+    protected override void OnDestroy()
     {
+        base.OnDestroy(); // AggregateRoot.OnDestroy() 호출 (자동 해제 포함)
+
         AtDestroy();
 
         foreach (var view in ownedViews)
@@ -254,12 +229,6 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
                 view.Cleanup();
         }
         ownedViews.Clear();
-
-        if (GameManager.UI != null)
-        {
-            GameManager.UI.Unregister(this);
-            LogDebug("Unregistered from UIManager");
-        }
 
         Unload();
     }
@@ -289,9 +258,46 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
     }
     #endregion
 
+    #region AggregateRoot Integration
+    protected void SetupPresenterTags()
+    {
+        AddTag(ObjectTag.UI);
+
+        // 메뉴 타입 자동 감지
+        if (GetType().Name.ToLower().Contains("menu"))
+        {
+            AddTag(ObjectTag.Menu);
+        }
+
+        // HUD 타입 자동 감지
+        if (GetType().Name.ToLower().Contains("hud"))
+        {
+            AddTag(ObjectTag.HUD);
+        }
+
+        // 다이얼로그 타입 자동 감지
+        if (GetType().Name.ToLower().Contains("dialog") || GetType().Name.ToLower().Contains("popup"))
+        {
+            AddTag(ObjectTag.Dialog);
+        }
+    }
+
+    protected void UpdateViewMetadata()
+    {
+        SetMetadata("ViewCount", ownedViews.Count);
+        SetMetadata("LastViewUpdate", DateTime.Now);
+
+        if (ownedViews.Count > 0)
+        {
+            SetMetadata("ViewTypes", ownedViews.Select(v => v.GetType().Name).ToArray());
+        }
+    }
+    #endregion
+
     #region Lifecycle Hooks
     protected virtual void AtInit()
     {
+        SetupPresenterTags();
         LogDebug($"Presenter {GetType().Name} initialized");
     }
 
@@ -306,18 +312,18 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
     {
         if (enableDebugLogs)
         {
-            Debug.Log($"[{GetType().Name}] {message}");
+            Debug.Log($"[{AggregateId}] {message}");
         }
     }
 
     protected void LogWarning(string message)
     {
-        Debug.LogWarning($"[{GetType().Name}] {message}");
+        Debug.LogWarning($"[{AggregateId}] {message}");
     }
 
     protected void LogError(string message)
     {
-        Debug.LogError($"[{GetType().Name}] {message}");
+        Debug.LogError($"[{AggregateId}] {message}");
     }
     #endregion
 
@@ -326,4 +332,3 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
     public bool HasViews => ownedViews.Count > 0;
     #endregion
 }
-#endregion

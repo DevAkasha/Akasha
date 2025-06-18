@@ -9,7 +9,7 @@ public static class RxDebugExtensions
         return rxVar;
     }
 
-    public static IRxMod<T> WithDebug<T>(this IRxMod<T> rxMod, string label)
+    public static RxMod<T> WithDebug<T>(this RxMod<T> rxMod, string label)
     {
         rxMod.AddListener(v => Debug.Log($"[RxMod] {label} = {v}")); // 값 변경을 구독할 수 있음
         return rxMod;

@@ -169,7 +169,7 @@ public class EffectRunner : ManagerBase
             float normalizedTime = elapsedTime / duration;
 
             // 보간 함수를 통해 현재 시간에 해당하는 값 계산
-            object interpolatedValue = effect.Interpolator.Invoke(normalizedTime);
+            float interpolatedValue = effect.Interpolator.Invoke(normalizedTime);
 
             // 모든 수정 가능한 필드에 보간된 값 적용
             foreach (var modifiable in target.GetModifiables())
@@ -183,7 +183,7 @@ public class EffectRunner : ManagerBase
                     if (!string.Equals(rxField.FieldName, modifier.FieldName, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (modifiable is IRxModBase mod)
+                    if (modifiable is IModifiable mod)
                     {
                         try
                         {

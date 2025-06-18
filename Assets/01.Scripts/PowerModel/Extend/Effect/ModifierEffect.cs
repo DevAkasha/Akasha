@@ -22,7 +22,7 @@ public class ModifierEffect : BaseEffect
 
     private bool hasSignFlip = false;
 
-    public Func<float, object> Interpolator { get; private set; }
+    public Func<float, float> Interpolator { get; private set; }
 
     public bool IsInterpolated { get; private set; } = false;
 
@@ -33,11 +33,8 @@ public class ModifierEffect : BaseEffect
         Duration = duration;
     }
 
-    public ModifierEffect Add<T>(string fieldName, ModifierType type, T value)
+    public ModifierEffect Add<T>(string fieldName, ModifierType type, float value)
     {
-        if (value is not int and not long and not float and not double)
-            throw new InvalidOperationException($"Unsupported modifier type: {typeof(T)}");
-
         modifiers.Add(new FieldModifier(fieldName, type, value!));
         return this;
     }
@@ -81,7 +78,7 @@ public class ModifierEffect : BaseEffect
         return this;
     }
 
-    public ModifierEffect SetInterpolated(float duration, Func<float, object> interpolator)
+    public ModifierEffect SetInterpolated(float duration, Func<float, float> interpolator)
     {
         this.Duration = duration;
         this.Interpolator = interpolator;
@@ -108,7 +105,7 @@ public class ModifierEffect : BaseEffect
                 if (modifiable is IRxField field &&
                     field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
                 {
-                    modifiable.ApplyModifier(Key, modifier.FieldName, modifier.Type, modifier.Value);
+                    modifiable.SetModifier(modifier.Type, Key, modifier.Value);
                 }
             }
 
@@ -167,9 +164,9 @@ public readonly struct FieldModifier // 필드에 적용할 modifier 정보를 �
 {
     public readonly string FieldName;
     public readonly ModifierType Type;
-    public readonly object Value;
+    public readonly float Value;
 
-    public FieldModifier(string fieldName, ModifierType type, object value)
+    public FieldModifier(string fieldName, ModifierType type, float value)
     {
         FieldName = fieldName;
         Type = type;

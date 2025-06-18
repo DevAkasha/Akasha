@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 public static class EffectBuilder
 {
@@ -17,9 +17,9 @@ public static class EffectBuilder
             effect = new ModifierEffect(effectId, mode, duration);
         }
 
-        public ModifierEffectBuilder Add<T>(string field, ModifierType type, T value)
+        public ModifierEffectBuilder Add<T>(string field, ModifierType type, float value)
         {
-            effect.Add(field, type, value);
+            effect.Add<T>(field, type, value);
             return this;
         }
 
@@ -57,7 +57,7 @@ public static class EffectBuilder
             effect.RefreshOnRepeat(value);
             return this;
         }
-        public ModifierEffectBuilder Interpolated(float duration, Func<float, object> interpolator)
+        public ModifierEffectBuilder Interpolated(float duration, Func<float, float> interpolator)
         {
             effect.SetInterpolated(duration, interpolator);
             return this;

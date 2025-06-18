@@ -160,7 +160,7 @@ public class RxVarSlot<T> : BaseViewSlot<RxVar<T>, T>
 /// <summary>
 /// RxModInt를 위한 슬롯
 /// </summary>
-public class RxModIntSlot : BaseViewSlot<RxModInt, int>
+public class RxModIntSlot : BaseViewSlot<RxMod<int>, int>
 {
     private Action<int> valueCallback;
 
@@ -206,7 +206,7 @@ public class RxModIntSlot : BaseViewSlot<RxModInt, int>
 /// <summary>
 /// RxModFloat를 위한 슬롯
 /// </summary>
-public class RxModFloatSlot : BaseViewSlot<RxModFloat, float>
+public class RxModFloatSlot : BaseViewSlot<RxMod<float>, float>
 {
     private Action<float> valueCallback;
 
@@ -252,7 +252,7 @@ public class RxModFloatSlot : BaseViewSlot<RxModFloat, float>
 /// <summary>
 /// RxModLong를 위한 슬롯
 /// </summary>
-public class RxModLongSlot : BaseViewSlot<RxModLong, long>
+public class RxModLongSlot : BaseViewSlot<RxMod<long>, long>
 {
     private Action<long> valueCallback;
 
@@ -298,7 +298,7 @@ public class RxModLongSlot : BaseViewSlot<RxModLong, long>
 /// <summary>
 /// RxModDouble를 위한 슬롯
 /// </summary>
-public class RxModDoubleSlot : BaseViewSlot<RxModDouble, double>
+public class RxModDoubleSlot : BaseViewSlot<RxMod<double>, double>
 {
     private Action<double> valueCallback;
 

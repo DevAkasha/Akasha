@@ -108,18 +108,6 @@ public class ModifierEffect : BaseEffect
                     modifiable.SetModifier(modifier.Type, Key, modifier.Value);
                 }
             }
-
-            if (HasSignFlip)
-            {
-                try
-                {
-                    modifiable.ApplySignFlip(Key);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"[ModifierEffect] Failed to apply sign flip: {e.Message}");
-                }
-            }
         }
 
         if (Mode == EffectApplyMode.Timed)

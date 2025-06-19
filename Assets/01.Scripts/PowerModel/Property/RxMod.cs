@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 
 public enum ModifierType
 {
@@ -18,187 +18,46 @@ public interface IModifiable
     void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate);
 }
 
-public readonly struct ModifierData
-{
-    public readonly ModifierKey Key;
-    public readonly ModifierType Type;
-    public readonly float Value;
-    public readonly DateTime AppliedTime;
-    public readonly int Order;
-
-    public ModifierData(ModifierKey key, ModifierType type, float value, int order)
-    {
-        Key = key;
-        Type = type;
-        Value = value;
-        AppliedTime = DateTime.Now;
-        Order = order;
-    }
-
-    public override string ToString()
-    {
-        return $"{Type}[{Key}] = {Value} (Order: {Order})";
-    }
-}
-
-public class ModifierContainer
-{
-    private readonly Dictionary<ModifierKey, LinkedListNode<ModifierData>> lookup = new();
-    private readonly LinkedList<ModifierData> modifiers = new();
-    private readonly Dictionary<ModifierType, HashSet<ModifierKey>> typeIndex = new();
-    private int nextOrder = 0;
-
-    public int Count => modifiers.Count;
-    public bool IsEmpty => modifiers.Count == 0;
-
-    public void AddModifier(ModifierKey key, ModifierType type, float value)
-    {
-        RemoveModifier(key);
-
-        var data = new ModifierData(key, type, value, nextOrder++);
-        var node = modifiers.AddLast(data);
-
-        lookup[key] = node;
-
-        if (!typeIndex.ContainsKey(type))
-            typeIndex[type] = new HashSet<ModifierKey>();
-        typeIndex[type].Add(key);
-    }
-
-    public bool RemoveModifier(ModifierKey key)
-    {
-        if (lookup.TryGetValue(key, out var node))
-        {
-            var data = node.Value;
-
-            modifiers.Remove(node);
-            lookup.Remove(key);
-
-            if (typeIndex.TryGetValue(data.Type, out var typeSet))
-            {
-                typeSet.Remove(key);
-                if (typeSet.Count == 0)
-                    typeIndex.Remove(data.Type);
-            }
-
-            return true;
-        }
-        return false;
-    }
-
-    public bool RemoveModifier(ModifierType type, ModifierKey key)
-    {
-        if (lookup.TryGetValue(key, out var node) && node.Value.Type == type)
-        {
-            return RemoveModifier(key);
-        }
-        return false;
-    }
-
-    public int RemoveModifiersByPredicate(Func<ModifierData, bool> predicate)
-    {
-        var toRemove = new List<ModifierKey>();
-
-        foreach (var modifier in modifiers)
-        {
-            if (predicate(modifier))
-                toRemove.Add(modifier.Key);
-        }
-
-        foreach (var key in toRemove)
-            RemoveModifier(key);
-
-        return toRemove.Count;
-    }
-
-    public int RemoveAllModifiersOfType(ModifierType type)
-    {
-        if (!typeIndex.TryGetValue(type, out var keys))
-            return 0;
-
-        var keysCopy = keys.ToArray();
-        foreach (var key in keysCopy)
-            RemoveModifier(key);
-
-        return keysCopy.Length;
-    }
-
-    public void Clear()
-    {
-        modifiers.Clear();
-        lookup.Clear();
-        typeIndex.Clear();
-        nextOrder = 0;
-    }
-
-    public bool ContainsKey(ModifierKey key) => lookup.ContainsKey(key);
-
-    public bool TryGetModifier(ModifierKey key, out ModifierData data)
-    {
-        if (lookup.TryGetValue(key, out var node))
-        {
-            data = node.Value;
-            return true;
-        }
-        data = default;
-        return false;
-    }
-
-    public IEnumerable<float> GetValuesByType(ModifierType type)
-    {
-        if (!typeIndex.TryGetValue(type, out var keys))
-            yield break;
-
-        foreach (var key in keys)
-        {
-            if (lookup.TryGetValue(key, out var node))
-                yield return node.Value.Value;
-        }
-    }
-
-    public IEnumerable<ModifierData> GetAllModifiers()
-    {
-        return modifiers;
-    }
-
-    public IEnumerable<ModifierData> GetModifiersByType(ModifierType type)
-    {
-        return modifiers.Where(m => m.Type == type);
-    }
-}
-
 public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
 {
     private T origin;
     private T cachedValue;
-    private float debugSum, debugAddMul, debugMul, debugPostAdd;
-    private readonly List<Action<T>> listeners = new();
-    private readonly ModifierContainer[] containers;
-    private readonly ModifierContainer additives = new();
-    private readonly ModifierContainer additiveMultipliers = new();
-    private readonly ModifierContainer multipliers = new();
-    private readonly ModifierContainer postMultiplicativeAdditives = new();
+    private readonly List<Action<T>> listeners;
+    private readonly int instanceId;
+    private readonly TypeCalculator<T> calculator;
 
-    public string FieldName { get; set; } = string.Empty;
+    public string FieldName { get; set; }
     public T Value => cachedValue;
 
-    public RxMod(T origin = default(T), string fieldName = null, IRxOwner owner = null)
+    private static ModifierManager ModifierManager => GameManager.Instance?.GetManager<ModifierManager>();
+
+    public RxMod(T origin = default, string fieldName = null, IRxOwner owner = null)
     {
         if (owner != null && !owner.IsRxAllOwner)
             throw new InvalidOperationException($"An invalid owner({owner}) has accessed.");
 
         this.origin = origin;
         this.cachedValue = origin;
+        this.listeners = new List<Action<T>>();
+        this.calculator = TypeCalculator<T>.Instance;
 
         if (!string.IsNullOrEmpty(fieldName))
             FieldName = fieldName;
 
-        containers = new[] { additives, additiveMultipliers, multipliers, postMultiplicativeAdditives };
+        if (ModifierManager != null)
+        {
+            instanceId = ModifierManager.RegisterInstance();
+        }
+        else
+        {
+            instanceId = GetHashCode();
+            UnityEngine.Debug.LogWarning("[RxMod] ModifierManager not found - using fallback instance ID");
+        }
 
         owner?.RegisterRx(this);
-        Recalculate();
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AddListener(Action<T> listener)
     {
         if (listener != null)
@@ -208,212 +67,129 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveListener(Action<T> listener)
     {
         listeners.Remove(listener);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetModifier(ModifierType type, ModifierKey key, float value)
+    {
+        ModifierManager?.SetModifier(instanceId, type, key, value);
+        Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RemoveModifier(ModifierKey key)
+    {
+        if (ModifierManager?.RemoveModifier(instanceId, key) == true)
+            Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RemoveModifier(ModifierType type, ModifierKey key)
+    {
+        if (ModifierManager?.RemoveModifier(instanceId, type, key) == true)
+            Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate)
+    {
+        if (ModifierManager?.RemoveModifiersByPredicate(instanceId, predicate) > 0)
+            Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RemoveAllModifiersOfType(ModifierType type)
+    {
+        if (ModifierManager?.RemoveAllModifiersOfType(instanceId, type) > 0)
+            Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ClearAll()
+    {
+        ModifierManager?.Clear(instanceId);
+        Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Set(T value)
+    {
+        if (!calculator.AreEqual(origin, value))
+        {
+            origin = value;
+            Recalculate();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetValue(T value, IRxCaller caller)
+    {
+        if (!caller.IsFunctionalCaller)
+            throw new InvalidOperationException($"An invalid caller({caller}) has accessed.");
+
+        Set(value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void ResetValue(T newValue)
+    {
+        origin = newValue;
+        ModifierManager?.Clear(instanceId);
+        cachedValue = newValue;
+        NotifyAll(cachedValue);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Recalculate()
     {
         T oldValue = cachedValue;
-        CalculateValue();
 
-        if (!AreEqual(oldValue, cachedValue))
+        float baseValue = calculator.ToFloat(origin);
+        float calculatedValue = ModifierManager?.CalculateValue(instanceId, baseValue) ?? baseValue;
+        cachedValue = calculator.FromFloat(calculatedValue);
+
+        if (!calculator.AreEqual(oldValue, cachedValue))
         {
             NotifyAll(cachedValue);
         }
     }
 
-    private void CalculateValue()
-    {
-        float sum = ToFloat(origin);
-        foreach (var value in additives.GetValuesByType(ModifierType.OriginAdd))
-            sum += value;
-
-        float addMul = 1f;
-        foreach (var value in additiveMultipliers.GetValuesByType(ModifierType.AddMultiplier))
-            addMul += value;
-
-        float mul = 1f;
-        foreach (var value in multipliers.GetValuesByType(ModifierType.Multiplier))
-            mul *= value;
-
-        float postAdd = 0f;
-        foreach (var value in postMultiplicativeAdditives.GetValuesByType(ModifierType.FinalAdd))
-            postAdd += value;
-
-        float result = (sum * addMul * mul) + postAdd;
-
-        debugSum = sum;
-        debugAddMul = addMul;
-        debugMul = mul;
-        debugPostAdd = postAdd;
-
-        cachedValue = FromFloat(result);
-    }
-
-    private static float ToFloat(T value)
-    {
-        return value switch
-        {
-            int intVal => intVal,
-            float floatVal => floatVal,
-            long longVal => longVal,
-            double doubleVal => (float)doubleVal,
-            _ => throw new NotSupportedException($"Type {typeof(T)} is not supported for RxMod")
-        };
-    }
-
-    private static T FromFloat(float value)
-    {
-        return typeof(T) switch
-        {
-            Type t when t == typeof(int) => (T)(object)(int)Math.Round(Math.Clamp(value, int.MinValue, int.MaxValue)),
-            Type t when t == typeof(float) => (T)(object)value,
-            Type t when t == typeof(long) => (T)(object)(long)Math.Round(Math.Clamp(value, long.MinValue, long.MaxValue)),
-            Type t when t == typeof(double) => (T)(object)(double)value,
-            _ => throw new NotSupportedException($"Type {typeof(T)} is not supported for RxMod")
-        };
-    }
-
-    private static bool AreEqual(T a, T b)
-    {
-        return typeof(T) switch
-        {
-            Type t when t == typeof(int) => (int)(object)a == (int)(object)b,
-            Type t when t == typeof(float) => Math.Abs((float)(object)a - (float)(object)b) < 0.0001f,
-            Type t when t == typeof(long) => (long)(object)a == (long)(object)b,
-            Type t when t == typeof(double) => Math.Abs((double)(object)a - (double)(object)b) < 0.0001,
-            _ => EqualityComparer<T>.Default.Equals(a, b)
-        };
-    }
-
-    public void ClearAll()
-    {
-        foreach (var container in containers)
-            container.Clear();
-        Recalculate();
-    }
-
-    public void SetModifier(ModifierType type, ModifierKey key, float value)
-    {
-        var container = GetContainer(type);
-        container.AddModifier(key, type, value);
-        Recalculate();
-    }
-
-    public void RemoveModifier(ModifierKey key)
-    {
-        bool removed = false;
-        foreach (var container in containers)
-            removed |= container.RemoveModifier(key);
-
-        if (removed)
-            Recalculate();
-    }
-
-    public void RemoveModifier(ModifierType type, ModifierKey key)
-    {
-        var container = GetContainer(type);
-        if (container.RemoveModifier(key))
-            Recalculate();
-    }
-
-    public void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate)
-    {
-        int totalRemoved = 0;
-        foreach (var container in containers)
-            totalRemoved += container.RemoveModifiersByPredicate(predicate);
-
-        if (totalRemoved > 0)
-            Recalculate();
-    }
-
-    public void RemoveAllModifiersOfType(ModifierType type)
-    {
-        var container = GetContainer(type);
-        if (container.Count > 0)
-        {
-            container.Clear();
-            Recalculate();
-        }
-    }
-
-    private ModifierContainer GetContainer(ModifierType type)
-    {
-        return type switch
-        {
-            ModifierType.OriginAdd => additives,
-            ModifierType.AddMultiplier => additiveMultipliers,
-            ModifierType.Multiplier => multipliers,
-            ModifierType.FinalAdd => postMultiplicativeAdditives,
-            _ => throw new ArgumentException($"Unknown modifier type: {type}")
-        };
-    }
-
-    public void SetValue(T value, IRxCaller caller)
-    {
-        if (!caller.IsFunctionalCaller)
-            throw new InvalidOperationException($"An invalid caller({caller}) has accessed.");
-        origin = value;
-        Recalculate();
-    }
-
-    public void Set(T value)
-    {
-        origin = value;
-        Recalculate();
-    }
-
-    public void ResetValue(T newValue)
-    {
-        origin = newValue;
-        ClearAll();
-        cachedValue = newValue;
-        NotifyAll(cachedValue);
-    }
-
-    public override bool Satisfies(Func<object, bool> predicate)
-        => predicate?.Invoke(Value) ?? false;
-
-    public override void ClearRelation()
-    {
-        ClearAll();
-        listeners.Clear();
-    }
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void NotifyAll(T value)
     {
-        foreach (var l in listeners)
-            l(value);
-    }
-
-    public IEnumerable<ModifierData> GetAllModifiersInfo()
-    {
-        foreach (var container in containers)
+        for (int i = 0; i < listeners.Count; i++)
         {
-            foreach (var modifier in container.GetAllModifiers())
-                yield return modifier;
+            listeners[i](value);
         }
     }
 
     public bool TryGetModifierInfo(ModifierKey key, out ModifierData data)
     {
-        foreach (var container in containers)
-        {
-            if (container.TryGetModifier(key, out data))
-                return true;
-        }
+        if (ModifierManager != null)
+            return ModifierManager.TryGetModifier(instanceId, key, out data);
 
         data = default;
         return false;
+    }
+
+    public Span<ModifierData> GetAllModifiersInfo()
+    {
+        if (ModifierManager == null)
+            return Span<ModifierData>.Empty;
+
+        return ModifierManager.GetAllModifiers(instanceId);
     }
 
     public string DebugFormula
     {
         get
         {
-            return $"({debugSum:F2}) * {debugAddMul:F2} * {debugMul:F2} + {debugPostAdd:F2} = {Value}";
+            float baseValue = calculator.ToFloat(origin);
+            return ModifierManager?.GetDebugFormula(instanceId, baseValue) ?? $"{baseValue:F2}";
         }
     }
 
@@ -421,40 +197,96 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
     {
         get
         {
-            var modifiers = GetAllModifiersInfo().OrderBy(m => m.Order);
-            var sb = new System.Text.StringBuilder();
-
-            sb.AppendLine($"RxMod<{typeof(T).Name}> '{FieldName}': {Value}");
-            sb.AppendLine($"Origin: {origin}");
-            sb.AppendLine("Applied Modifiers:");
-
-            foreach (var modifier in modifiers)
-            {
-                sb.AppendLine($"  {modifier}");
-            }
-
-            sb.Append($"Formula: {DebugFormula}");
-            return sb.ToString();
+            float baseValue = calculator.ToFloat(origin);
+            return ModifierManager?.GetDetailedDebugInfo(instanceId, FieldName ?? "Unknown", baseValue)
+                   ?? $"RxMod<{typeof(T).Name}> '{FieldName}': {Value} (No ModifierManager)";
         }
+    }
+
+    public override bool Satisfies(Func<object, bool> predicate)
+        => predicate?.Invoke(Value) ?? false;
+
+    public override void ClearRelation()
+    {
+        ModifierManager?.UnregisterInstance(instanceId);
+        listeners.Clear();
     }
 }
 
-public readonly struct ModifierKey : IEquatable<ModifierKey>
+public abstract class TypeCalculator<T>
 {
-    public readonly Enum Id;
+    public static readonly TypeCalculator<T> Instance = CreateInstance();
 
-    public ModifierKey(Enum id)
+    private static TypeCalculator<T> CreateInstance()
     {
-        Id = id ?? throw new ArgumentNullException(nameof(id));
+        return typeof(T) switch
+        {
+            Type t when t == typeof(int) => (TypeCalculator<T>)(object)new IntCalculator(),
+            Type t when t == typeof(float) => (TypeCalculator<T>)(object)new FloatCalculator(),
+            Type t when t == typeof(long) => (TypeCalculator<T>)(object)new LongCalculator(),
+            Type t when t == typeof(double) => (TypeCalculator<T>)(object)new DoubleCalculator(),
+            _ => throw new NotSupportedException($"Type {typeof(T)} is not supported for RxMod")
+        };
     }
 
-    public override string ToString() => $"{Id.GetType().Name}:{Id}";
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public abstract float ToFloat(T value);
 
-    public bool Equals(ModifierKey other) => Equals(Id, other.Id);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public abstract T FromFloat(float value);
 
-    public override bool Equals(object obj) => obj is ModifierKey other && Equals(other);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public abstract bool AreEqual(T a, T b);
+}
 
-    public override int GetHashCode() => Id.GetHashCode();
+public class IntCalculator : TypeCalculator<int>
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override float ToFloat(int value) => value;
 
-    public static implicit operator ModifierKey(Enum value) => new(value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override int FromFloat(float value) => (int)Math.Round(Math.Clamp(value, int.MinValue, int.MaxValue));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override bool AreEqual(int a, int b) => a == b;
+}
+
+public class FloatCalculator : TypeCalculator<float>
+{
+    private const float Epsilon = 0.0001f;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override float ToFloat(float value) => value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override float FromFloat(float value) => value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override bool AreEqual(float a, float b) => Math.Abs(a - b) < Epsilon;
+}
+
+public class LongCalculator : TypeCalculator<long>
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override float ToFloat(long value) => value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override long FromFloat(float value) => (long)Math.Round(Math.Clamp(value, long.MinValue, long.MaxValue));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override bool AreEqual(long a, long b) => a == b;
+}
+
+public class DoubleCalculator : TypeCalculator<double>
+{
+    private const double Epsilon = 0.0001;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override float ToFloat(double value) => (float)value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override double FromFloat(float value) => value;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public override bool AreEqual(double a, double b) => Math.Abs(a - b) < Epsilon;
 }

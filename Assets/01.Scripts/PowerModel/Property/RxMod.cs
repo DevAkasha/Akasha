@@ -1,37 +1,183 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 public enum ModifierType
 {
     OriginAdd,
     AddMultiplier,
     Multiplier,
-    FinalAdd,
-    SignFlip
+    FinalAdd
 }
 
 public interface IModifiable
 {
     void SetModifier(ModifierType type, ModifierKey key, float value);
-    void ApplySignFlip(ModifierKey key);
     void RemoveModifier(ModifierKey key);
+    void RemoveModifier(ModifierType type, ModifierKey key);
+    void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate);
+}
+
+public readonly struct ModifierData
+{
+    public readonly ModifierKey Key;
+    public readonly ModifierType Type;
+    public readonly float Value;
+    public readonly DateTime AppliedTime;
+    public readonly int Order;
+
+    public ModifierData(ModifierKey key, ModifierType type, float value, int order)
+    {
+        Key = key;
+        Type = type;
+        Value = value;
+        AppliedTime = DateTime.Now;
+        Order = order;
+    }
+
+    public override string ToString()
+    {
+        return $"{Type}[{Key}] = {Value} (Order: {Order})";
+    }
+}
+
+public class ModifierContainer
+{
+    private readonly Dictionary<ModifierKey, LinkedListNode<ModifierData>> lookup = new();
+    private readonly LinkedList<ModifierData> modifiers = new();
+    private readonly Dictionary<ModifierType, HashSet<ModifierKey>> typeIndex = new();
+    private int nextOrder = 0;
+
+    public int Count => modifiers.Count;
+    public bool IsEmpty => modifiers.Count == 0;
+
+    public void AddModifier(ModifierKey key, ModifierType type, float value)
+    {
+        RemoveModifier(key);
+
+        var data = new ModifierData(key, type, value, nextOrder++);
+        var node = modifiers.AddLast(data);
+
+        lookup[key] = node;
+
+        if (!typeIndex.ContainsKey(type))
+            typeIndex[type] = new HashSet<ModifierKey>();
+        typeIndex[type].Add(key);
+    }
+
+    public bool RemoveModifier(ModifierKey key)
+    {
+        if (lookup.TryGetValue(key, out var node))
+        {
+            var data = node.Value;
+
+            modifiers.Remove(node);
+            lookup.Remove(key);
+
+            if (typeIndex.TryGetValue(data.Type, out var typeSet))
+            {
+                typeSet.Remove(key);
+                if (typeSet.Count == 0)
+                    typeIndex.Remove(data.Type);
+            }
+
+            return true;
+        }
+        return false;
+    }
+
+    public bool RemoveModifier(ModifierType type, ModifierKey key)
+    {
+        if (lookup.TryGetValue(key, out var node) && node.Value.Type == type)
+        {
+            return RemoveModifier(key);
+        }
+        return false;
+    }
+
+    public int RemoveModifiersByPredicate(Func<ModifierData, bool> predicate)
+    {
+        var toRemove = new List<ModifierKey>();
+
+        foreach (var modifier in modifiers)
+        {
+            if (predicate(modifier))
+                toRemove.Add(modifier.Key);
+        }
+
+        foreach (var key in toRemove)
+            RemoveModifier(key);
+
+        return toRemove.Count;
+    }
+
+    public int RemoveAllModifiersOfType(ModifierType type)
+    {
+        if (!typeIndex.TryGetValue(type, out var keys))
+            return 0;
+
+        var keysCopy = keys.ToArray();
+        foreach (var key in keysCopy)
+            RemoveModifier(key);
+
+        return keysCopy.Length;
+    }
+
+    public void Clear()
+    {
+        modifiers.Clear();
+        lookup.Clear();
+        typeIndex.Clear();
+        nextOrder = 0;
+    }
+
+    public bool ContainsKey(ModifierKey key) => lookup.ContainsKey(key);
+
+    public bool TryGetModifier(ModifierKey key, out ModifierData data)
+    {
+        if (lookup.TryGetValue(key, out var node))
+        {
+            data = node.Value;
+            return true;
+        }
+        data = default;
+        return false;
+    }
+
+    public IEnumerable<float> GetValuesByType(ModifierType type)
+    {
+        if (!typeIndex.TryGetValue(type, out var keys))
+            yield break;
+
+        foreach (var key in keys)
+        {
+            if (lookup.TryGetValue(key, out var node))
+                yield return node.Value.Value;
+        }
+    }
+
+    public IEnumerable<ModifierData> GetAllModifiers()
+    {
+        return modifiers;
+    }
+
+    public IEnumerable<ModifierData> GetModifiersByType(ModifierType type)
+    {
+        return modifiers.Where(m => m.Type == type);
+    }
 }
 
 public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
 {
-    private T origin; // 초기 원본 값
-    private T cachedValue; // 계산된 값 캐싱
-
+    private T origin;
+    private T cachedValue;
     private float debugSum, debugAddMul, debugMul, debugPostAdd;
-    private bool debugIsNegative;
-
     private readonly List<Action<T>> listeners = new();
-
-    private readonly Dictionary<ModifierKey, float> additives = new();
-    private readonly Dictionary<ModifierKey, float> additiveMultipliers = new();
-    private readonly Dictionary<ModifierKey, float> multipliers = new();
-    private readonly Dictionary<ModifierKey, float> postMultiplicativeAdditives = new();
-    private readonly HashSet<ModifierKey> signModifiers = new();
+    private readonly ModifierContainer[] containers;
+    private readonly ModifierContainer additives = new();
+    private readonly ModifierContainer additiveMultipliers = new();
+    private readonly ModifierContainer multipliers = new();
+    private readonly ModifierContainer postMultiplicativeAdditives = new();
 
     public string FieldName { get; set; } = string.Empty;
     public T Value => cachedValue;
@@ -47,11 +193,13 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         if (!string.IsNullOrEmpty(fieldName))
             FieldName = fieldName;
 
+        containers = new[] { additives, additiveMultipliers, multipliers, postMultiplicativeAdditives };
+
         owner?.RegisterRx(this);
         Recalculate();
     }
 
-    public void AddListener(Action<T> listener) // 값 변경을 구독할 수 있음
+    public void AddListener(Action<T> listener)
     {
         if (listener != null)
         {
@@ -60,7 +208,7 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         }
     }
 
-    public void RemoveListener(Action<T> listener) // 구독 해제
+    public void RemoveListener(Action<T> listener)
     {
         listeners.Remove(listener);
     }
@@ -79,30 +227,31 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
     private void CalculateValue()
     {
         float sum = ToFloat(origin);
-        foreach (var v in additives.Values) sum += v;
+        foreach (var value in additives.GetValuesByType(ModifierType.OriginAdd))
+            sum += value;
 
         float addMul = 1f;
-        foreach (var v in additiveMultipliers.Values) addMul += v;
+        foreach (var value in additiveMultipliers.GetValuesByType(ModifierType.AddMultiplier))
+            addMul += value;
 
         float mul = 1f;
-        foreach (var v in multipliers.Values) mul *= v;
+        foreach (var value in multipliers.GetValuesByType(ModifierType.Multiplier))
+            mul *= value;
 
         float postAdd = 0f;
-        foreach (var v in postMultiplicativeAdditives.Values) postAdd += v;
-
-        bool isNegative = signModifiers.Count % 2 == 1;
+        foreach (var value in postMultiplicativeAdditives.GetValuesByType(ModifierType.FinalAdd))
+            postAdd += value;
 
         float result = (sum * addMul * mul) + postAdd;
-        float finalResult = isNegative ? -result : result;
 
         debugSum = sum;
         debugAddMul = addMul;
         debugMul = mul;
         debugPostAdd = postAdd;
-        debugIsNegative = isNegative;
 
-        cachedValue = FromFloat(finalResult);
+        cachedValue = FromFloat(result);
     }
+
     private static float ToFloat(T value)
     {
         return value switch
@@ -114,6 +263,7 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
             _ => throw new NotSupportedException($"Type {typeof(T)} is not supported for RxMod")
         };
     }
+
     private static T FromFloat(float value)
     {
         return typeof(T) switch
@@ -140,47 +290,65 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
 
     public void ClearAll()
     {
-        additives.Clear();
-        additiveMultipliers.Clear();
-        multipliers.Clear();
-        postMultiplicativeAdditives.Clear();
-        signModifiers.Clear();
+        foreach (var container in containers)
+            container.Clear();
         Recalculate();
     }
 
     public void SetModifier(ModifierType type, ModifierKey key, float value)
     {
-        switch (type)
-        {
-            case ModifierType.OriginAdd: additives[key] = value; break;
-            case ModifierType.AddMultiplier: additiveMultipliers[key] = value; break;
-            case ModifierType.Multiplier: multipliers[key] = value; break;
-            case ModifierType.FinalAdd: postMultiplicativeAdditives[key] = value; break;
-            default: throw new InvalidOperationException("Use AddModifier for SignFlip.");
-        }
+        var container = GetContainer(type);
+        container.AddModifier(key, type, value);
         Recalculate();
     }
 
-    public void AddModifier(ModifierType type, ModifierKey key)
+    public void RemoveModifier(ModifierKey key)
     {
-        if (type != ModifierType.SignFlip)
-            throw new InvalidOperationException("Only SignFlip can be added without a value.");
-        signModifiers.Add(key);
-        Recalculate();
+        bool removed = false;
+        foreach (var container in containers)
+            removed |= container.RemoveModifier(key);
+
+        if (removed)
+            Recalculate();
     }
 
     public void RemoveModifier(ModifierType type, ModifierKey key)
     {
-        bool removed = type switch
+        var container = GetContainer(type);
+        if (container.RemoveModifier(key))
+            Recalculate();
+    }
+
+    public void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate)
+    {
+        int totalRemoved = 0;
+        foreach (var container in containers)
+            totalRemoved += container.RemoveModifiersByPredicate(predicate);
+
+        if (totalRemoved > 0)
+            Recalculate();
+    }
+
+    public void RemoveAllModifiersOfType(ModifierType type)
+    {
+        var container = GetContainer(type);
+        if (container.Count > 0)
         {
-            ModifierType.OriginAdd => additives.Remove(key),
-            ModifierType.AddMultiplier => additiveMultipliers.Remove(key),
-            ModifierType.Multiplier => multipliers.Remove(key),
-            ModifierType.FinalAdd => postMultiplicativeAdditives.Remove(key),
-            ModifierType.SignFlip => signModifiers.Remove(key),
-            _ => false
+            container.Clear();
+            Recalculate();
+        }
+    }
+
+    private ModifierContainer GetContainer(ModifierType type)
+    {
+        return type switch
+        {
+            ModifierType.OriginAdd => additives,
+            ModifierType.AddMultiplier => additiveMultipliers,
+            ModifierType.Multiplier => multipliers,
+            ModifierType.FinalAdd => postMultiplicativeAdditives,
+            _ => throw new ArgumentException($"Unknown modifier type: {type}")
         };
-        if (removed) Recalculate();
     }
 
     public void SetValue(T value, IRxCaller caller)
@@ -196,6 +364,7 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         origin = value;
         Recalculate();
     }
+
     public void ResetValue(T newValue)
     {
         origin = newValue;
@@ -203,23 +372,9 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         cachedValue = newValue;
         NotifyAll(cachedValue);
     }
-  
-    public void ApplySignFlip(ModifierKey key) => AddModifier(ModifierType.SignFlip, key);
 
-    public void RemoveModifier(ModifierKey key)
-    {
-        bool removed = false;
-        removed |= additives.Remove(key);
-        removed |= additiveMultipliers.Remove(key);
-        removed |= multipliers.Remove(key);
-        removed |= postMultiplicativeAdditives.Remove(key);
-        removed |= signModifiers.Remove(key);
-
-        if (removed)
-            Recalculate();
-    }
     public override bool Satisfies(Func<object, bool> predicate)
-     => predicate?.Invoke(Value) ?? false;
+        => predicate?.Invoke(Value) ?? false;
 
     public override void ClearRelation()
     {
@@ -233,21 +388,52 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
             l(value);
     }
 
+    public IEnumerable<ModifierData> GetAllModifiersInfo()
+    {
+        foreach (var container in containers)
+        {
+            foreach (var modifier in container.GetAllModifiers())
+                yield return modifier;
+        }
+    }
+
+    public bool TryGetModifierInfo(ModifierKey key, out ModifierData data)
+    {
+        foreach (var container in containers)
+        {
+            if (container.TryGetModifier(key, out data))
+                return true;
+        }
+
+        data = default;
+        return false;
+    }
+
     public string DebugFormula
     {
         get
         {
+            return $"({debugSum:F2}) * {debugAddMul:F2} * {debugMul:F2} + {debugPostAdd:F2} = {Value}";
+        }
+    }
+
+    public string DetailedDebugInfo
+    {
+        get
+        {
+            var modifiers = GetAllModifiersInfo().OrderBy(m => m.Order);
             var sb = new System.Text.StringBuilder();
 
-            if (debugIsNegative)
-                sb.Append("-1 * ");
+            sb.AppendLine($"RxMod<{typeof(T).Name}> '{FieldName}': {Value}");
+            sb.AppendLine($"Origin: {origin}");
+            sb.AppendLine("Applied Modifiers:");
 
-            sb.Append('(').Append(debugSum.ToString("F2")).Append(')');
-            sb.Append(" * ").Append(debugAddMul.ToString("F2"));
-            sb.Append(" * ").Append(debugMul.ToString("F2"));
-            sb.Append(" + ").Append(debugPostAdd.ToString("F2"));
-            sb.Append(" = ").Append(Value);
+            foreach (var modifier in modifiers)
+            {
+                sb.AppendLine($"  {modifier}");
+            }
 
+            sb.Append($"Formula: {DebugFormula}");
             return sb.ToString();
         }
     }
@@ -262,7 +448,7 @@ public readonly struct ModifierKey : IEquatable<ModifierKey>
         Id = id ?? throw new ArgumentNullException(nameof(id));
     }
 
-    public override string ToString() => $"{Id.GetType().Name}:{Id}"; // 문자열로 요약
+    public override string ToString() => $"{Id.GetType().Name}:{Id}";
 
     public bool Equals(ModifierKey other) => Equals(Id, other.Id);
 

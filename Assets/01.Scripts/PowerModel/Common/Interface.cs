@@ -2,6 +2,16 @@
 using System.Collections;
 using System.Collections.Generic;
 
+public enum EffectApplyMode { Passive, Manual, Timed }
+
+public enum ModifierType
+{
+    OriginAdd,
+    AddMultiplier,
+    Multiplier,
+    FinalAdd
+}
+
 public interface IModifiableTarget
 {
     IEnumerable<IModifiable> GetModifiables(); // 수정 가능한 필드 목록 반환

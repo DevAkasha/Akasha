@@ -2,20 +2,18 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-public enum ModifierType
-{
-    OriginAdd,
-    AddMultiplier,
-    Multiplier,
-    FinalAdd
-}
-
 public interface IModifiable
 {
     void SetModifier(ModifierType type, ModifierKey key, float value);
+    void SetModifier(ModifierType type, ModifierKey key, float value, StackBehavior stackBehavior);
+    void SetStackModifier(ModifierType type, ModifierKey key, float value, int stackId = -1);
     void RemoveModifier(ModifierKey key);
+    void RemoveModifier(ModifierKey key, int stackId);
     void RemoveModifier(ModifierType type, ModifierKey key);
     void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate);
+    int GetStackCount(ModifierKey baseKey);
+    bool HasStack(ModifierKey baseKey);
+    IEnumerable<ModifierData> GetModifiersByBaseKey(ModifierKey baseKey);
 }
 
 public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
@@ -81,9 +79,30 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetModifier(ModifierType type, ModifierKey key, float value, StackBehavior stackBehavior)
+    {
+        ModifierManager?.SetModifier(instanceId, type, key, value, stackBehavior);
+        Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void SetStackModifier(ModifierType type, ModifierKey key, float value, int stackId = -1)
+    {
+        ModifierManager?.SetStackModifier(instanceId, type, key, value, stackId);
+        Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveModifier(ModifierKey key)
     {
-        if (ModifierManager?.RemoveModifier(instanceId, key) == true)
+        if (ModifierManager?.RemoveByBaseKey(instanceId, key) == true)
+            Recalculate();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void RemoveModifier(ModifierKey key, int stackId)
+    {
+        if (ModifierManager?.RemoveModifier(instanceId, key, stackId) == true)
             Recalculate();
     }
 
@@ -167,10 +186,10 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         }
     }
 
-    public bool TryGetModifierInfo(ModifierKey key, out ModifierData data)
+    public bool TryGetModifierInfo(ModifierKey key, out ModifierData data, int stackId = 0)
     {
         if (ModifierManager != null)
-            return ModifierManager.TryGetModifier(instanceId, key, out data);
+            return ModifierManager.TryGetModifier(instanceId, key, out data, stackId);
 
         data = default;
         return false;
@@ -182,6 +201,32 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
             return Span<ModifierData>.Empty;
 
         return ModifierManager.GetAllModifiers(instanceId);
+    }
+
+    public IEnumerable<ModifierData> GetModifiersByBaseKey(ModifierKey baseKey)
+    {
+        if (ModifierManager == null)
+            return Array.Empty<ModifierData>();
+
+        return ModifierManager.GetModifiersByBaseKey(instanceId, baseKey);
+    }
+
+    public int GetStackCount(ModifierKey baseKey)
+    {
+        if (ModifierManager == null)
+            return 0;
+
+        return ModifierManager.GetStackCount(instanceId, baseKey);
+    }
+
+    public bool HasStack(ModifierKey baseKey)
+    {
+        return GetStackCount(baseKey) > 0;
+    }
+
+    public bool HasMultipleStacks(ModifierKey baseKey)
+    {
+        return GetStackCount(baseKey) > 1;
     }
 
     public string DebugFormula

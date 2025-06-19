@@ -2,31 +2,48 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
+public enum StackBehavior
+{
+    Stack,
+    ReplaceLatest,
+    KeepFirst,
+    TakeMaximum,
+    TakeMinimum
+}
+
 public readonly struct ModifierData : IEquatable<ModifierData>
 {
     public readonly ModifierKey Key;
     public readonly ModifierType Type;
     public readonly float Value;
     public readonly int Order;
+    public readonly StackBehavior StackBehavior;
+    public readonly int StackId;
 
-    public ModifierData(ModifierKey key, ModifierType type, float value, int order)
+    public ModifierData(ModifierKey key, ModifierType type, float value, int order, StackBehavior stackBehavior = StackBehavior.Stack, int stackId = 0)
     {
         Key = key;
         Type = type;
         Value = value;
         Order = order;
+        StackBehavior = stackBehavior;
+        StackId = stackId;
     }
 
+    public ModifierKey FullKey => StackId == 0 ? Key : ModifierKey.Create($"{Key}[{StackId}]");
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Equals(ModifierData other) => Key.Equals(other.Key);
+    public bool Equals(ModifierData other) => Key.Equals(other.Key) && StackId == other.StackId;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override bool Equals(object obj) => obj is ModifierData other && Equals(other);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public override int GetHashCode() => Key.GetHashCode();
+    public override int GetHashCode() => HashCode.Combine(Key, StackId);
 
-    public override string ToString() => $"{Type}[{Key}] = {Value} (Order: {Order})";
+    public override string ToString() => StackId == 0
+        ? $"{Type}[{Key}] = {Value} (Order: {Order}, Stack: {StackBehavior})"
+        : $"{Type}[{Key}[{StackId}]] = {Value} (Order: {Order}, Stack: {StackBehavior})";
 }
 
 public class ModifierContainer
@@ -38,10 +55,13 @@ public class ModifierContainer
     private ModifierType[] types;
     private float[] values;
     private int[] orders;
+    private StackBehavior[] stackBehaviors;
+    private int[] stackIds;
     private int count;
 
-    private readonly Dictionary<ModifierKey, int> keyToIndex;
+    private readonly Dictionary<(ModifierKey, int), int> keyToIndex;
     private readonly Dictionary<ModifierType, List<int>> typeIndices;
+    private readonly Dictionary<ModifierKey, List<int>> baseKeyIndices;
 
     public int Count => count;
     public bool IsEmpty => count == 0;
@@ -52,15 +72,35 @@ public class ModifierContainer
         types = new ModifierType[InitialCapacity];
         values = new float[InitialCapacity];
         orders = new int[InitialCapacity];
+        stackBehaviors = new StackBehavior[InitialCapacity];
+        stackIds = new int[InitialCapacity];
 
-        keyToIndex = new Dictionary<ModifierKey, int>();
+        keyToIndex = new Dictionary<(ModifierKey, int), int>();
         typeIndices = new Dictionary<ModifierType, List<int>>();
+        baseKeyIndices = new Dictionary<ModifierKey, List<int>>();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddModifier(ModifierKey key, ModifierType type, float value, int order)
+    public void AddModifier(ModifierKey key, ModifierType type, float value, int order, StackBehavior stackBehavior = StackBehavior.Stack, int stackId = 0)
     {
-        RemoveModifier(key);
+        if (stackBehavior == StackBehavior.Stack)
+        {
+            AddStackableModifier(key, type, value, order, stackBehavior, stackId);
+        }
+        else
+        {
+            AddNonStackableModifier(key, type, value, order, stackBehavior);
+        }
+    }
+
+    private void AddStackableModifier(ModifierKey key, ModifierType type, float value, int order, StackBehavior stackBehavior, int stackId)
+    {
+        // 같은 키+스택ID 조합이 이미 존재하는지 확인
+        if (keyToIndex.ContainsKey((key, stackId)))
+        {
+            UnityEngine.Debug.LogWarning($"[ModifierContainer] Modifier with key '{key}' and stackId '{stackId}' already exists. Skipping addition.");
+            return;
+        }
 
         EnsureCapacity();
 
@@ -69,26 +109,74 @@ public class ModifierContainer
         types[index] = type;
         values[index] = value;
         orders[index] = order;
+        stackBehaviors[index] = stackBehavior;
+        stackIds[index] = stackId;
 
-        keyToIndex[key] = index;
-
-        if (!typeIndices.TryGetValue(type, out var indices))
-        {
-            indices = new List<int>();
-            typeIndices[type] = indices;
-        }
-        indices.Add(index);
+        keyToIndex[(key, stackId)] = index;
+        AddToTypeIndex(type, index);
+        AddToBaseKeyIndex(key, index);
 
         count++;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool RemoveModifier(ModifierKey key)
+    private void AddNonStackableModifier(ModifierKey key, ModifierType type, float value, int order, StackBehavior stackBehavior)
     {
-        if (!keyToIndex.TryGetValue(key, out var removeIndex))
+        if (baseKeyIndices.TryGetValue(key, out var existingIndices))
+        {
+            var existingIndex = -1;
+            for (int i = 0; i < existingIndices.Count; i++)
+            {
+                var idx = existingIndices[i];
+                if (types[idx] == type)
+                {
+                    existingIndex = idx;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0)
+            {
+                switch (stackBehavior)
+                {
+                    case StackBehavior.ReplaceLatest:
+                        values[existingIndex] = value;
+                        orders[existingIndex] = order;
+                        break;
+
+                    case StackBehavior.KeepFirst:
+                        break;
+
+                    case StackBehavior.TakeMaximum:
+                        if (value > values[existingIndex])
+                        {
+                            values[existingIndex] = value;
+                            orders[existingIndex] = order;
+                        }
+                        break;
+
+                    case StackBehavior.TakeMinimum:
+                        if (value < values[existingIndex])
+                        {
+                            values[existingIndex] = value;
+                            orders[existingIndex] = order;
+                        }
+                        break;
+                }
+                return;
+            }
+        }
+
+        AddStackableModifier(key, type, value, order, stackBehavior, 0);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool RemoveModifier(ModifierKey key, int stackId = 0)
+    {
+        if (!keyToIndex.TryGetValue((key, stackId), out var removeIndex))
             return false;
 
         var removedType = types[removeIndex];
+        var removedKey = keys[removeIndex];
 
         var lastIndex = count - 1;
 
@@ -98,17 +186,86 @@ public class ModifierContainer
             types[removeIndex] = types[lastIndex];
             values[removeIndex] = values[lastIndex];
             orders[removeIndex] = orders[lastIndex];
+            stackBehaviors[removeIndex] = stackBehaviors[lastIndex];
+            stackIds[removeIndex] = stackIds[lastIndex];
 
-            keyToIndex[keys[removeIndex]] = removeIndex;
+            keyToIndex[(keys[removeIndex], stackIds[removeIndex])] = removeIndex;
 
             UpdateTypeIndices(types[removeIndex], lastIndex, removeIndex);
+            UpdateBaseKeyIndices(keys[removeIndex], lastIndex, removeIndex);
         }
 
         UpdateTypeIndices(removedType, removeIndex, -1);
-        keyToIndex.Remove(key);
+        UpdateBaseKeyIndices(removedKey, removeIndex, -1);
+        keyToIndex.Remove((key, stackId));
         count--;
 
         return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool RemoveByBaseKey(ModifierKey baseKey)
+    {
+        if (!baseKeyIndices.TryGetValue(baseKey, out var indices))
+            return false;
+
+        var keysToRemove = new List<(ModifierKey, int)>();
+        foreach (var index in indices)
+        {
+            keysToRemove.Add((keys[index], stackIds[index]));
+        }
+
+        foreach (var (key, stackId) in keysToRemove)
+        {
+            RemoveModifier(key, stackId);
+        }
+
+        return keysToRemove.Count > 0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool RemoveByBaseKeyAndType(ModifierKey baseKey, ModifierType type)
+    {
+        if (!baseKeyIndices.TryGetValue(baseKey, out var indices))
+            return false;
+
+        var keysToRemove = new List<(ModifierKey, int)>();
+        foreach (var index in indices)
+        {
+            if (types[index] == type)
+            {
+                keysToRemove.Add((keys[index], stackIds[index]));
+            }
+        }
+
+        foreach (var (key, stackId) in keysToRemove)
+        {
+            RemoveModifier(key, stackId);
+        }
+
+        return keysToRemove.Count > 0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AddToTypeIndex(ModifierType type, int index)
+    {
+        if (!typeIndices.TryGetValue(type, out var indices))
+        {
+            indices = new List<int>();
+            typeIndices[type] = indices;
+        }
+        indices.Add(index);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void AddToBaseKeyIndex(ModifierKey baseKey, int index)
+    {
+        if (!baseKeyIndices.TryGetValue(baseKey, out var indices))
+        {
+            indices = new List<int>();
+            baseKeyIndices[baseKey] = indices;
+        }
+        indices.Add(index);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -130,6 +287,33 @@ public class ModifierContainer
                         if (indices.Count == 0)
                         {
                             typeIndices.Remove(type);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void UpdateBaseKeyIndices(ModifierKey baseKey, int oldIndex, int newIndex)
+    {
+        if (baseKeyIndices.TryGetValue(baseKey, out var indices))
+        {
+            for (int i = 0; i < indices.Count; i++)
+            {
+                if (indices[i] == oldIndex)
+                {
+                    if (newIndex >= 0)
+                    {
+                        indices[i] = newIndex;
+                    }
+                    else
+                    {
+                        indices.RemoveAt(i);
+                        if (indices.Count == 0)
+                        {
+                            baseKeyIndices.Remove(baseKey);
                         }
                     }
                     break;
@@ -167,14 +351,17 @@ public class ModifierContainer
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool ContainsKey(ModifierKey key) => keyToIndex.ContainsKey(key);
+    public bool ContainsKey(ModifierKey key, int stackId = 0) => keyToIndex.ContainsKey((key, stackId));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryGetModifier(ModifierKey key, out ModifierData data)
+    public bool ContainsBaseKey(ModifierKey baseKey) => baseKeyIndices.ContainsKey(baseKey);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetModifier(ModifierKey key, out ModifierData data, int stackId = 0)
     {
-        if (keyToIndex.TryGetValue(key, out var index))
+        if (keyToIndex.TryGetValue((key, stackId), out var index))
         {
-            data = new ModifierData(keys[index], types[index], values[index], orders[index]);
+            data = new ModifierData(keys[index], types[index], values[index], orders[index], stackBehaviors[index], stackIds[index]);
             return true;
         }
         data = default;
@@ -186,24 +373,25 @@ public class ModifierContainer
         count = 0;
         keyToIndex.Clear();
         typeIndices.Clear();
+        baseKeyIndices.Clear();
     }
 
     public int RemoveByPredicate(Func<ModifierData, bool> predicate)
     {
-        var toRemove = new List<ModifierKey>();
+        var toRemove = new List<(ModifierKey, int)>();
 
         for (int i = 0; i < count; i++)
         {
-            var data = new ModifierData(keys[i], types[i], values[i], orders[i]);
+            var data = new ModifierData(keys[i], types[i], values[i], orders[i], stackBehaviors[i], stackIds[i]);
             if (predicate(data))
             {
-                toRemove.Add(keys[i]);
+                toRemove.Add((keys[i], stackIds[i]));
             }
         }
 
-        foreach (var key in toRemove)
+        foreach (var (key, stackId) in toRemove)
         {
-            RemoveModifier(key);
+            RemoveModifier(key, stackId);
         }
 
         return toRemove.Count;
@@ -214,15 +402,16 @@ public class ModifierContainer
         if (!typeIndices.TryGetValue(type, out var indices))
             return 0;
 
-        var keysToRemove = new ModifierKey[indices.Count];
+        var keysToRemove = new (ModifierKey, int)[indices.Count];
         for (int i = 0; i < indices.Count; i++)
         {
-            keysToRemove[i] = keys[indices[i]];
+            var index = indices[i];
+            keysToRemove[i] = (keys[index], stackIds[index]);
         }
 
-        foreach (var key in keysToRemove)
+        foreach (var (key, stackId) in keysToRemove)
         {
-            RemoveModifier(key);
+            RemoveModifier(key, stackId);
         }
 
         return keysToRemove.Length;
@@ -233,7 +422,7 @@ public class ModifierContainer
         var result = new ModifierData[count];
         for (int i = 0; i < count; i++)
         {
-            result[i] = new ModifierData(keys[i], types[i], values[i], orders[i]);
+            result[i] = new ModifierData(keys[i], types[i], values[i], orders[i], stackBehaviors[i], stackIds[i]);
         }
         return result.AsSpan();
     }
@@ -246,8 +435,25 @@ public class ModifierContainer
         for (int i = 0; i < indices.Count; i++)
         {
             var index = indices[i];
-            yield return new ModifierData(keys[index], types[index], values[index], orders[index]);
+            yield return new ModifierData(keys[index], types[index], values[index], orders[index], stackBehaviors[index], stackIds[index]);
         }
+    }
+
+    public IEnumerable<ModifierData> GetByBaseKey(ModifierKey baseKey)
+    {
+        if (!baseKeyIndices.TryGetValue(baseKey, out var indices))
+            yield break;
+
+        for (int i = 0; i < indices.Count; i++)
+        {
+            var index = indices[i];
+            yield return new ModifierData(keys[index], types[index], values[index], orders[index], stackBehaviors[index], stackIds[index]);
+        }
+    }
+
+    public int GetStackCount(ModifierKey baseKey)
+    {
+        return baseKeyIndices.TryGetValue(baseKey, out var indices) ? indices.Count : 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -260,11 +466,13 @@ public class ModifierContainer
             Array.Resize(ref types, newCapacity);
             Array.Resize(ref values, newCapacity);
             Array.Resize(ref orders, newCapacity);
+            Array.Resize(ref stackBehaviors, newCapacity);
+            Array.Resize(ref stackIds, newCapacity);
         }
     }
 
     public string GetDebugInfo()
     {
-        return $"Capacity: {keys.Length}, Count: {count}, Types: {typeIndices.Count}";
+        return $"Capacity: {keys.Length}, Count: {count}, Types: {typeIndices.Count}, BaseKeys: {baseKeyIndices.Count}";
     }
 }

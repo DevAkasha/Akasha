@@ -8,6 +8,9 @@ public static class EffectBuilder
     public static DirectEffectBuilder DefineDirect(Enum effectId)
         => new DirectEffectBuilder(effectId);
 
+    public static ComplexEffectBuilder DefineComplex(Enum effectId)
+        => new ComplexEffectBuilder(effectId);
+
     public class ModifierEffectBuilder
     {
         private readonly ModifierEffect effect;
@@ -52,11 +55,19 @@ public static class EffectBuilder
             effect.AllowStacking(value);
             return this;
         }
+
+        public ModifierEffectBuilder SetStackBehavior(StackBehavior behavior)
+        {
+            effect.SetStackBehavior(behavior);
+            return this;
+        }
+
         public ModifierEffectBuilder RefreshOnDuplicate(bool value = true)
         {
             effect.RefreshOnRepeat(value);
             return this;
         }
+
         public ModifierEffectBuilder Interpolated(float duration, Func<float, float> interpolator)
         {
             effect.SetInterpolated(duration, interpolator);
@@ -96,9 +107,6 @@ public static class EffectBuilder
         public DirectEffect Build() => effect;
     }
 
-    public static ComplexEffectBuilder DefineComplex(Enum effectId)
-    => new ComplexEffectBuilder(effectId);
-
     public class ComplexEffectBuilder
     {
         private readonly ComplexEffect effect;
@@ -121,5 +129,41 @@ public static class EffectBuilder
         }
 
         public ComplexEffect Build() => effect;
+    }
+}
+
+public static class StackEffectHelper
+{
+    public static ModifierEffect CreateStackablePoison(float damagePerStack, float duration = 5f)
+    {
+        return EffectBuilder.DefineModifier(TestEffectId.Poison, EffectApplyMode.Timed, duration)
+            .Add<int>("Health", ModifierType.OriginAdd, -damagePerStack)
+            .Stackable()
+            .Build();
+    }
+
+    public static ModifierEffect CreateNonStackableShield(float shieldAmount, float duration = 10f)
+    {
+        return EffectBuilder.DefineModifier(TestEffectId.DefenseBuff, EffectApplyMode.Timed, duration)
+            .Add<int>("Defense", ModifierType.FinalAdd, shieldAmount)
+            .SetStackBehavior(StackBehavior.TakeMaximum)
+            .Build();
+    }
+
+    public static ModifierEffect CreateReplacingBuff(float buffAmount, float duration = 15f)
+    {
+        return EffectBuilder.DefineModifier(TestEffectId.StrengthBuff, EffectApplyMode.Timed, duration)
+            .Add<int>("Attack", ModifierType.Multiplier, buffAmount)
+            .SetStackBehavior(StackBehavior.ReplaceLatest)
+            .RefreshOnDuplicate()
+            .Build();
+    }
+
+    public static ModifierEffect CreatePersistentBuff(float buffAmount)
+    {
+        return EffectBuilder.DefineModifier(TestEffectId.LegendaryWeapon, EffectApplyMode.Manual)
+            .Add<int>("Attack", ModifierType.OriginAdd, buffAmount)
+            .SetStackBehavior(StackBehavior.KeepFirst)
+            .Build();
     }
 }

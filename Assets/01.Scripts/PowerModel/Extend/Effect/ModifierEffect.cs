@@ -2,28 +2,23 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+
+
 public class ModifierEffect : BaseEffect
 {
     public EffectApplyMode Mode { get; private set; }
-
     public float Duration { get; private set; }
-
     public IReadOnlyList<FieldModifier> Modifiers => modifiers;
-
     public bool HasSignFlip => hasSignFlip;
-
     public bool Stackable { get; private set; } = false;
-
     public bool RefreshOnDuplicate { get; private set; } = false;
-
     public Func<bool> RemoveTrigger { get; private set; } = null;
+    public StackBehavior StackBehavior { get; private set; } = StackBehavior.ReplaceLatest;
 
     private readonly List<FieldModifier> modifiers = new();
-
     private bool hasSignFlip = false;
 
     public Func<float, float> Interpolator { get; private set; }
-
     public bool IsInterpolated { get; private set; } = false;
 
     public ModifierEffect(Enum id, EffectApplyMode mode = EffectApplyMode.Manual, float duration = 0f)
@@ -35,7 +30,7 @@ public class ModifierEffect : BaseEffect
 
     public ModifierEffect Add<T>(string fieldName, ModifierType type, float value)
     {
-        modifiers.Add(new FieldModifier(fieldName, type, value!));
+        modifiers.Add(new FieldModifier(fieldName, type, value));
         return this;
     }
 
@@ -44,7 +39,6 @@ public class ModifierEffect : BaseEffect
         hasSignFlip = true;
         return this;
     }
-
 
     public new ModifierEffect When(Func<bool> condition)
     {
@@ -69,6 +63,20 @@ public class ModifierEffect : BaseEffect
     public ModifierEffect AllowStacking(bool value = true)
     {
         Stackable = value;
+        if (value)
+        {
+            StackBehavior = StackBehavior.Stack;
+        }
+        return this;
+    }
+
+    public ModifierEffect SetStackBehavior(StackBehavior behavior)
+    {
+        StackBehavior = behavior;
+        if (behavior == StackBehavior.Stack)
+        {
+            Stackable = true;
+        }
         return this;
     }
 
@@ -105,7 +113,14 @@ public class ModifierEffect : BaseEffect
                 if (modifiable is IRxField field &&
                     field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
                 {
-                    modifiable.SetModifier(modifier.Type, Key, modifier.Value);
+                    if (Stackable && StackBehavior == StackBehavior.Stack)
+                    {
+                        modifiable.SetStackModifier(modifier.Type, Key, modifier.Value);
+                    }
+                    else
+                    {
+                        modifiable.SetModifier(modifier.Type, Key, modifier.Value, StackBehavior);
+                    }
                 }
             }
         }
@@ -144,11 +159,80 @@ public class ModifierEffect : BaseEffect
             }
         }
     }
+
+    public void ApplyStack(IModelOwner target, int stackId)
+    {
+        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+        if (modifiableTarget == null)
+        {
+            Debug.LogError($"[ModifierEffect] Target {target} does not implement IModifiableTarget");
+            return;
+        }
+
+        foreach (var modifiable in modifiableTarget.GetModifiables())
+        {
+            if (modifiable == null)
+                continue;
+
+            foreach (var modifier in Modifiers)
+            {
+                if (modifiable is IRxField field &&
+                    field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                {
+                    modifiable.SetStackModifier(modifier.Type, Key, modifier.Value, stackId);
+                }
+            }
+        }
+    }
+
+    public void RemoveStack(IModelOwner target, int stackId)
+    {
+        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+        if (modifiableTarget == null)
+            return;
+
+        foreach (var modifiable in modifiableTarget.GetModifiables())
+        {
+            if (modifiable == null)
+                continue;
+
+            try
+            {
+                modifiable.RemoveModifier(Key, stackId);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[ModifierEffect] Failed to remove stack modifier: {e.Message}");
+            }
+        }
+    }
+
+    public int GetStackCount(IModelOwner target)
+    {
+        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+        if (modifiableTarget == null)
+            return 0;
+
+        foreach (var modifiable in modifiableTarget.GetModifiables())
+        {
+            if (modifiable == null)
+                continue;
+
+            foreach (var modifier in Modifiers)
+            {
+                if (modifiable is IRxField field &&
+                    field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return modifiable.GetStackCount(Key);
+                }
+            }
+        }
+
+        return 0;
+    }
 }
 
-public enum EffectApplyMode { Passive, Manual, Timed } // modifier 적용 방식 (수동, 자동, 시간제한)
-
-public readonly struct FieldModifier // 필드에 적용할 modifier 정보를 담는 구조체
+public readonly struct FieldModifier
 {
     public readonly string FieldName;
     public readonly ModifierType Type;

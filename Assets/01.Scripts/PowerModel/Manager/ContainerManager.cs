@@ -12,7 +12,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
     [SerializeField] private bool enableInstanceTracking = true;
     [SerializeField] private bool enableGroupManagement = true;
 
-    #region Registry Management
     // InstanceID를 키로 하는 등록된 객체 관리
     private readonly Dictionary<int, T> registeredItems = new();
     private readonly Dictionary<int, ContainerItemInfo> itemInfos = new();
@@ -35,9 +34,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
     // 이벤트 시스템
     private readonly Dictionary<int, List<Action<T>>> itemEvents = new();
 
-    /// <summary>
-    /// 객체를 관리 대상으로 등록
-    /// </summary>
     public void Register(T item, ContainerItemOptions options = null)
     {
         if (item == null)
@@ -83,9 +79,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         OnItemRegistered?.Invoke(item);
     }
 
-    /// <summary>
-    /// AggregateRoot의 메타데이터를 자동으로 사용하여 등록
-    /// </summary>
     public void RegisterWithAutoMetadata(T item)
     {
         if (item == null)
@@ -134,9 +127,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         }
     }
 
-    /// <summary>
-    /// 객체를 관리 대상에서 해제
-    /// </summary>
     public void Unregister(T item)
     {
         if (item == null)
@@ -205,9 +195,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         // 의존성 정리
         RemoveAllDependencies(instanceId);
     }
-    #endregion
 
-    #region Group Management
     public void AddToGroup(int instanceId, string groupName)
     {
         if (!enableGroupManagement) return;
@@ -273,9 +261,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         }
         Log($"Destroyed group '{groupName}': {items.Length} items");
     }
-    #endregion
 
-    #region Tag System
     public void AddTag(int instanceId, string tag)
     {
         if (!tags.ContainsKey(tag))
@@ -348,9 +334,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         return result.Select(id => registeredItems.TryGetValue(id, out var item) ? item : null)
                     .Where(item => item != null);
     }
-    #endregion
 
-    #region Dependency Management
     public void AddDependency(int dependentId, int dependencyId)
     {
         if (!dependencies.ContainsKey(dependentId))
@@ -422,9 +406,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
     {
         return !HasDependents(instanceId);
     }
-    #endregion
 
-    #region State Management
     public void SetItemState(int instanceId, ItemState state)
     {
         if (itemStates.TryGetValue(instanceId, out var oldState))
@@ -450,9 +432,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
                         .Select(kvp => registeredItems.TryGetValue(kvp.Key, out var item) ? item : null)
                         .Where(item => item != null);
     }
-    #endregion
 
-    #region Event System
     public void SubscribeToItem(int instanceId, Action<T> callback)
     {
         if (!itemEvents.ContainsKey(instanceId))
@@ -489,12 +469,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
             }
         }
     }
-    #endregion
 
-    #region Advanced Queries
-    /// <summary>
-    /// 복잡한 조건으로 객체 검색
-    /// </summary>
     public IEnumerable<T> FindItems(Func<ContainerItemInfo, bool> predicate)
     {
         return itemInfos.Values.Where(predicate)
@@ -502,25 +477,17 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
                               .Where(item => item != null);
     }
 
-    /// <summary>
-    /// 씬별 객체 조회
-    /// </summary>
+
     public IEnumerable<T> GetByScene(Scene scene)
     {
         return FindItems(info => info.Scene == scene);
     }
 
-    /// <summary>
-    /// 등록 시간 기준 조회
-    /// </summary>
     public IEnumerable<T> GetByRegistrationTime(float minTime, float maxTime = float.MaxValue)
     {
         return FindItems(info => info.RegisterTime >= minTime && info.RegisterTime <= maxTime);
     }
 
-    /// <summary>
-    /// 타입별 조회 (상속 관계 고려)
-    /// </summary>
     public IEnumerable<T> GetByType(Type type, bool includeSubclasses = true)
     {
         if (includeSubclasses)
@@ -532,12 +499,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
             return FindItems(info => info.Type == type);
         }
     }
-    #endregion
 
-    #region Batch Operations
-    /// <summary>
-    /// 배치 활성화/비활성화
-    /// </summary>
     public void SetActiveByCondition(Func<T, bool> condition, bool active)
     {
         var items = registeredItems.Values.Where(condition).ToArray();
@@ -548,9 +510,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         Log($"Set {items.Length} items active: {active}");
     }
 
-    /// <summary>
-    /// 배치 상태 변경
-    /// </summary>
     public void SetStateByCondition(Func<T, bool> condition, ItemState state)
     {
         var items = registeredItems.Values.Where(condition).ToArray();
@@ -561,9 +520,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         Log($"Set {items.Length} items to state: {state}");
     }
 
-    /// <summary>
-    /// 조건부 배치 삭제
-    /// </summary>
     public void DestroyByCondition(Func<T, bool> condition, bool forceDependencyBreak = false)
     {
         var items = registeredItems.Values.Where(condition).ToArray();
@@ -586,16 +542,11 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
 
         Log($"Destroyed {items.Length} items");
     }
-    #endregion
 
-    #region Object Pooling
     // 타입별로 별도 풀 관리
     private readonly Dictionary<Type, Queue<T>> objectPools = new();
     private readonly Dictionary<Type, T> poolPrefabs = new();
 
-    /// <summary>
-    /// 풀에서 객체 가져오기 (없으면 새로 생성)
-    /// </summary>
     public TSpecific GetFromPool<TSpecific>(TSpecific prefab) where TSpecific : T
     {
         if (prefab == null)
@@ -647,9 +598,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         return result;
     }
 
-    /// <summary>
-    /// 객체를 풀에 반납
-    /// </summary>
     public void ReturnToPool<TSpecific>(TSpecific item) where TSpecific : T
     {
         if (item == null)
@@ -672,10 +620,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
 
         Log($"Returned to pool: {type.Name}");
     }
-
-    /// <summary>
-    /// 특정 타입의 풀 정리
-    /// </summary>
     public void ClearPool<TSpecific>() where TSpecific : T
     {
         Type type = typeof(TSpecific);
@@ -700,10 +644,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
             Log($"Cleared pool for {type.Name}: {count} objects destroyed");
         }
     }
-
-    /// <summary>
-    /// 모든 풀 정리
-    /// </summary>
     public void ClearAllPools()
     {
         var types = objectPools.Keys.ToArray();
@@ -728,15 +668,11 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         objectPools.Clear();
         poolPrefabs.Clear();
     }
-    #endregion
 
-    #region Events
     public event Action<T> OnItemRegistered;
     public event Action<T> OnItemUnregistered;
     public event Action<T, ItemState, ItemState> OnItemStateChanged;
-    #endregion
 
-    #region Basic API (기존 기능 유지)
     public void SetActive(T item, bool active)
     {
         if (item == null)
@@ -785,9 +721,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
     }
 
     public int RegisteredCount => registeredItems.Count;
-    #endregion
 
-    #region Lifecycle
     protected override void OnDestroy()
     {
         base.OnDestroy();
@@ -798,9 +732,7 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         // 모든 풀 정리
         ClearAllPools();
     }
-    #endregion
 
-    #region Debug & Utilities
     private void Log(string message)
     {
         if (enableDebugLogs)
@@ -822,9 +754,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         Debug.LogError($"[{GetType().Name}] {message}");
     }
 
-    /// <summary>
-    /// 풀링된 객체 수 반환
-    /// </summary>
     public int PooledCount
     {
         get
@@ -833,9 +762,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         }
     }
 
-    /// <summary>
-    /// 풀 정보 반환
-    /// </summary>
     public Dictionary<Type, int> GetPoolInfo()
     {
         return objectPools.ToDictionary(
@@ -845,8 +771,6 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
     }
 
 #if UNITY_EDITOR
-    [Header("Debug Info")]
-    [SerializeField, TextArea(5, 15)] private string debugInfo;
 
     protected override void OnValidate()
     {
@@ -875,35 +799,22 @@ public class ContainerManager<T> : ManagerBase where T : AggregateRoot
         }
     }
 #endif
-    #endregion
 }
 
-/// <summary>
-/// ContainerManager의 AggregateRoot 통합을 위한 확장 메서드들
-/// </summary>
 public static class ContainerManagerExtensions
 {
-    /// <summary>
-    /// ObjectTag enum을 사용한 검색
-    /// </summary>
     public static IEnumerable<T> GetByTag<T>(this ContainerManager<T> manager, ObjectTag tag)
         where T : AggregateRoot
     {
         return manager.GetByTag(tag.ToString());
     }
 
-    /// <summary>
-    /// 여러 ObjectTag로 검색 (AND 조건)
-    /// </summary>
     public static IEnumerable<T> GetByTags<T>(this ContainerManager<T> manager, params ObjectTag[] tags)
         where T : AggregateRoot
     {
         return manager.GetByTags(tags.Select(t => t.ToString()).ToArray());
     }
 
-    /// <summary>
-    /// 복합 조건 검색 (그룹 + 태그)
-    /// </summary>
     public static IEnumerable<T> GetByGroupAndTag<T>(this ContainerManager<T> manager, string groupName, ObjectTag tag)
         where T : AggregateRoot
     {
@@ -911,20 +822,12 @@ public static class ContainerManagerExtensions
         var tagItems = manager.GetByTag(tag);
         return groupItems.Intersect(tagItems);
     }
-
-    /// <summary>
-    /// 상태별 ObjectTag 검색
-    /// </summary>
     public static IEnumerable<T> GetByTagAndState<T>(this ContainerManager<T> manager, ObjectTag tag, ItemState state)
         where T : AggregateRoot
     {
         return manager.GetByTag(tag).Where(item =>
             manager.GetItemState(item.GetInstanceID()) == state);
     }
-
-    /// <summary>
-    /// 상세 리포트 생성
-    /// </summary>
     public static string GenerateDetailedReport<T>(this ContainerManager<T> manager)
         where T : AggregateRoot
     {
@@ -988,17 +891,11 @@ public static class ContainerManagerExtensions
     }
 }
 
-/// <summary>
-/// 성능 최적화된 쿼리 헬퍼 클래스
-/// </summary>
 public static class ContainerQueryOptimizer
 {
     // 캐시된 결과를 저장 (프레임 단위 캐싱)
     private static readonly Dictionary<string, (int frame, object result)> queryCache = new();
 
-    /// <summary>
-    /// 캐시된 그룹 검색 (같은 프레임 내에서는 캐시 사용)
-    /// </summary>
     public static IEnumerable<T> GetGroupCached<T>(this ContainerManager<T> manager, string groupName)
         where T : AggregateRoot
     {
@@ -1016,9 +913,6 @@ public static class ContainerQueryOptimizer
         return result;
     }
 
-    /// <summary>
-    /// 캐시된 태그 검색
-    /// </summary>
     public static IEnumerable<T> GetByTagCached<T>(this ContainerManager<T> manager, ObjectTag tag)
         where T : AggregateRoot
     {
@@ -1036,17 +930,11 @@ public static class ContainerQueryOptimizer
         return result;
     }
 
-    /// <summary>
-    /// 캐시 정리 (메모리 정리용)
-    /// </summary>
     public static void ClearCache()
     {
         queryCache.Clear();
     }
 
-    /// <summary>
-    /// 오래된 캐시 정리 (10프레임 이상 지난 항목)
-    /// </summary>
     public static void CleanupOldCache()
     {
         int currentFrame = Time.frameCount;
@@ -1061,9 +949,6 @@ public static class ContainerQueryOptimizer
     }
 }
 
-/// <summary>
-/// 조건부 배치 작업을 위한 빌더 클래스
-/// </summary>
 public class BatchOperationBuilder<T> where T : AggregateRoot
 {
     private readonly ContainerManager<T> manager;
@@ -1074,63 +959,42 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         this.manager = manager;
     }
 
-    /// <summary>
-    /// 그룹 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> InGroup(string groupName)
     {
         conditions.Add(item => item.IsInGroup(groupName));
         return this;
     }
 
-    /// <summary>
-    /// 태그 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> WithTag(ObjectTag tag)
     {
         conditions.Add(item => item.HasTag(tag));
         return this;
     }
 
-    /// <summary>
-    /// 여러 태그 중 하나라도 가진 경우
-    /// </summary>
     public BatchOperationBuilder<T> WithAnyTag(params ObjectTag[] tags)
     {
         conditions.Add(item => item.HasAnyTag(tags));
         return this;
     }
 
-    /// <summary>
-    /// 모든 태그를 가진 경우
-    /// </summary>
     public BatchOperationBuilder<T> WithAllTags(params ObjectTag[] tags)
     {
         conditions.Add(item => item.HasAllTags(tags));
         return this;
     }
 
-    /// <summary>
-    /// 상태 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> InState(ItemState state)
     {
         conditions.Add(item => manager.GetItemState(item.GetInstanceID()) == state);
         return this;
     }
 
-    /// <summary>
-    /// 커스텀 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> Where(Func<T, bool> condition)
     {
         conditions.Add(condition);
         return this;
     }
 
-    /// <summary>
-    /// 메타데이터 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> WithMetadata(string key, object value)
     {
         conditions.Add(item =>
@@ -1140,52 +1004,33 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         });
         return this;
     }
-
-    /// <summary>
-    /// 생성 시간 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> CreatedAfter(DateTime time)
     {
         conditions.Add(item => item.CreatedTime > time);
         return this;
     }
 
-    /// <summary>
-    /// 생성 시간 조건 추가
-    /// </summary>
     public BatchOperationBuilder<T> CreatedBefore(DateTime time)
     {
         conditions.Add(item => item.CreatedTime < time);
         return this;
     }
 
-    /// <summary>
-    /// 조건에 맞는 모든 항목 반환
-    /// </summary>
     public IEnumerable<T> Get()
     {
         return manager.GetAll().Where(item => conditions.All(condition => condition(item)));
     }
 
-    /// <summary>
-    /// 조건에 맞는 항목 수 반환
-    /// </summary>
     public int Count()
     {
         return Get().Count();
     }
 
-    /// <summary>
-    /// 조건에 맞는 첫 번째 항목 반환
-    /// </summary>
     public T GetFirst()
     {
         return Get().FirstOrDefault();
     }
 
-    /// <summary>
-    /// 배치 활성화/비활성화
-    /// </summary>
     public int SetActive(bool active)
     {
         var items = Get().ToList();
@@ -1196,9 +1041,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         return items.Count;
     }
 
-    /// <summary>
-    /// 배치 상태 변경
-    /// </summary>
     public int SetState(ItemState state)
     {
         var items = Get().ToList();
@@ -1209,9 +1051,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         return items.Count;
     }
 
-    /// <summary>
-    /// 배치 삭제
-    /// </summary>
     public int Destroy(bool forceDependencyBreak = false)
     {
         var items = Get().ToList();
@@ -1237,9 +1076,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         return destroyedCount;
     }
 
-    /// <summary>
-    /// 배치 그룹 추가
-    /// </summary>
     public int AddToGroup(string groupName)
     {
         var items = Get().ToList();
@@ -1250,9 +1086,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         return items.Count;
     }
 
-    /// <summary>
-    /// 배치 그룹 제거
-    /// </summary>
     public int RemoveFromGroup(string groupName)
     {
         var items = Get().ToList();
@@ -1262,10 +1095,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         }
         return items.Count;
     }
-
-    /// <summary>
-    /// 배치 태그 추가
-    /// </summary>
     public int AddTag(ObjectTag tag)
     {
         var items = Get().ToList();
@@ -1275,10 +1104,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         }
         return items.Count;
     }
-
-    /// <summary>
-    /// 배치 태그 제거
-    /// </summary>
     public int RemoveTag(ObjectTag tag)
     {
         var items = Get().ToList();
@@ -1288,10 +1113,6 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
         }
         return items.Count;
     }
-
-    /// <summary>
-    /// 배치 메타데이터 설정
-    /// </summary>
     public int SetMetadata<TValue>(string key, TValue value)
     {
         var items = Get().ToList();
@@ -1303,14 +1124,8 @@ public class BatchOperationBuilder<T> where T : AggregateRoot
     }
 }
 
-/// <summary>
-/// ContainerManager에 배치 작업 빌더 기능 추가
-/// </summary>
 public static class BatchOperationExtensions
 {
-    /// <summary>
-    /// 배치 작업 빌더 시작
-    /// </summary>
     public static BatchOperationBuilder<T> Batch<T>(this ContainerManager<T> manager)
         where T : AggregateRoot
     {
@@ -1318,14 +1133,8 @@ public static class BatchOperationExtensions
     }
 }
 
-/// <summary>
-/// 고급 분석 및 모니터링 도구
-/// </summary>
 public static class ContainerAnalytics<T> where T : AggregateRoot
 {
-    /// <summary>
-    /// 메모리 사용량 분석
-    /// </summary>
     public static ContainerMemoryReport AnalyzeMemoryUsage(ContainerManager<T> manager)
     {
         var report = new ContainerMemoryReport();
@@ -1348,9 +1157,6 @@ public static class ContainerAnalytics<T> where T : AggregateRoot
         return report;
     }
 
-    /// <summary>
-    /// 성능 지표 수집
-    /// </summary>
     public static ContainerPerformanceMetrics CollectPerformanceMetrics(ContainerManager<T> manager)
     {
         var metrics = new ContainerPerformanceMetrics();
@@ -1384,9 +1190,6 @@ public static class ContainerAnalytics<T> where T : AggregateRoot
     }
 }
 
-/// <summary>
-/// 메모리 사용량 보고서
-/// </summary>
 public class ContainerMemoryReport
 {
     public int TotalObjects;
@@ -1406,9 +1209,6 @@ public class ContainerMemoryReport
     }
 }
 
-/// <summary>
-/// 성능 지표 클래스
-/// </summary>
 public class ContainerPerformanceMetrics
 {
     public int TotalItems;
@@ -1450,9 +1250,6 @@ public class ContainerItemInfo
     public string CreatedScene;
     public Dictionary<string, object> CustomMetadata;
 
-    /// <summary>
-    /// 정보를 포맷된 문자열로 변환
-    /// </summary>
     public string ToFormattedString()
     {
         return $"Item Info:\n" +

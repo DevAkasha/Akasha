@@ -9,7 +9,6 @@ public class EffectManager : ManagerBase
 
     private readonly Dictionary<ModifierKey, BaseEffect> effects = new();
 
-    #region Manager Lifecycle
     protected override void OnManagerAwake()
     {
         base.OnManagerAwake();
@@ -21,9 +20,7 @@ public class EffectManager : ManagerBase
         base.OnManagerDestroy();
         effects.Clear();
     }
-    #endregion
 
-    #region Effect Registration
     public void Register(BaseEffect effect)
     {
         if (effect == null)
@@ -52,9 +49,8 @@ public class EffectManager : ManagerBase
     {
         return effects.ContainsKey(key);
     }
-    #endregion
 
-    #region Effect Retrieval
+
     public bool TryGetEffect(ModifierKey key, out BaseEffect effect)
     {
         return effects.TryGetValue(key, out effect);
@@ -91,9 +87,7 @@ public class EffectManager : ManagerBase
     {
         return GetEffect<ComplexEffect>(key);
     }
-    #endregion
 
-    #region Built-in Effects
     private void RegisterBuiltInEffects()
     {
         Debug.Log("[EffectManager] Registering built-in effects...");
@@ -116,12 +110,7 @@ public class EffectManager : ManagerBase
 
         Debug.Log("[EffectManager] Built-in effects registered successfully");
     }
-    #endregion
 
-    #region Effect Application Helpers
-    /// <summary>
-    /// 효과를 대상에게 직접 적용하는 헬퍼 메서드
-    /// </summary>
     public void ApplyEffect(ModifierKey key, IModelOwner target)
     {
         if (TryGetEffect(key, out var effect))
@@ -134,9 +123,7 @@ public class EffectManager : ManagerBase
         }
     }
 
-    /// <summary>
-    /// 효과를 대상에서 제거하는 헬퍼 메서드
-    /// </summary>
+
     public void RemoveEffect(ModifierKey key, IModelOwner target)
     {
         if (TryGetEffect(key, out var effect))
@@ -148,25 +135,14 @@ public class EffectManager : ManagerBase
             Debug.LogWarning($"[EffectManager] Cannot remove unknown effect: {key}");
         }
     }
-    #endregion
 
-    #region Debug & Utilities
-    /// <summary>
-    /// 등록된 모든 효과의 키 목록 반환
-    /// </summary>
     public IEnumerable<ModifierKey> GetAllEffectKeys()
     {
         return effects.Keys;
     }
 
-    /// <summary>
-    /// 등록된 효과 수 반환
-    /// </summary>
     public int EffectCount => effects.Count;
 
-    /// <summary>
-    /// 효과 타입별 개수 반환
-    /// </summary>
     public Dictionary<Type, int> GetEffectTypeStats()
     {
         var stats = new Dictionary<Type, int>();
@@ -181,9 +157,6 @@ public class EffectManager : ManagerBase
     }
 
 #if UNITY_EDITOR
-    [Header("Debug Info")]
-    [SerializeField, TextArea(3, 10)] private string debugInfo;
-
     protected override void OnValidate()
     {
         base.OnValidate();
@@ -200,5 +173,4 @@ public class EffectManager : ManagerBase
         }
     }
 #endif
-    #endregion
 }

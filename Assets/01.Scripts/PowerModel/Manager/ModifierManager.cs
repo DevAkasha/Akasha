@@ -334,8 +334,7 @@ public class ModifierManager : ManagerBase
     }
 
 #if UNITY_EDITOR
-    [Header("Debug Statistics")]
-    [SerializeField, TextArea(3, 12)] private string debugStatistics;
+
 
     protected override void OnValidate()
     {
@@ -359,7 +358,7 @@ public class ModifierManager : ManagerBase
                 }
             }
 
-            debugStatistics = $"Total Instances: {TotalContainers}\n" +
+            debugInfo = $"Total Instances: {TotalContainers}\n" +
                             $"Total Modifiers: {totalModifiers}\n" +
                             $"Average per Instance: {(TotalContainers > 0 ? (float)totalModifiers / TotalContainers : 0):F1}\n" +
                             $"Registered Keys: {ModifierKey.GetRegisteredCount()}\n" +

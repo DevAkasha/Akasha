@@ -7,7 +7,7 @@ using UnityEngine.SceneManagement;
 
 public class EffectRunner : ManagerBase
 {
-    public override int InitializationPriority => 15;
+    public override int InitializationPriority => 65;
 
     private readonly Dictionary<(ModifierKey, IModelOwner), Coroutine> activeEffects = new();
     private EffectManager effectManager;
@@ -316,8 +316,6 @@ public class EffectRunner : ManagerBase
     }
 
 #if UNITY_EDITOR
-    [Header("Debug Info")]
-    [SerializeField, TextArea(3, 10)] private string debugInfo;
 
     protected override void OnValidate()
     {

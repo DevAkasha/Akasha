@@ -4,27 +4,20 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// GameManager의 프레임워크 핵심 부분 - 기본 매니저 시스템만
-/// </summary>
 public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
 {
-    #region Framework Core Fields
     [Header("Core Manager References")]
     [SerializeField] private UIManager uiManager;
     [SerializeField] private WorldManager worldManager;
 
-    // 모든 매니저들을 관리하는 리스트
     private readonly List<ManagerBase> allManagers = new();
     private bool isInitialized = false;
-    #endregion
+    private bool isProjectInitialized = false;
 
-    #region Static Properties for Easy Access
     public static UIManager UI => Instance?.uiManager;
     public static WorldManager World => Instance?.worldManager;
-    #endregion
+    public bool IsProjectInitialized => isProjectInitialized;
 
-    #region IRxOwner, IRxCaller Implementation
     public bool IsRxVarOwner => true;
     public bool IsRxAllOwner => false;
     public bool IsLogicalCaller => true;
@@ -46,9 +39,7 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
         }
         trackedRxVars.Clear();
     }
-    #endregion
 
-    #region Unity Lifecycle
     protected override void Awake()
     {
         base.Awake();
@@ -87,18 +78,14 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
             NotifyAllManagers(manager => manager.OnApplicationPauseChanged(pauseStatus));
         }
     }
-    #endregion
 
-    #region Manager System
     private void InitializeManagers()
     {
         if (isInitialized) return;
 
-        // 1. 모든 매니저들 찾기
         var managers = FindObjectsOfType<ManagerBase>(true);
         allManagers.AddRange(managers);
 
-        // 2. UIManager, WorldManager 찾기
         var uiMgr = FindObjectOfType<UIManager>(true);
         var worldMgr = FindObjectOfType<WorldManager>(true);
 
@@ -108,7 +95,10 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
         if (worldMgr != null && !allManagers.Contains(worldMgr))
             allManagers.Add(worldMgr);
 
-        // 3. 우선도 기반으로 정렬 후 초기화
+        // 1단계: 매니저 참조 먼저 설정
+        InitializeProject();
+
+        // 2단계: 우선순위 기반으로 Awake 호출
         var sortedManagers = allManagers
             .OrderBy(m => m.InitializationPriority)
             .ThenBy(m => m.name)
@@ -116,10 +106,15 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
 
         foreach (var manager in sortedManagers)
         {
+            // 이미 Awake가 호출된 매니저들은 OnManagerAwake만 다시 호출
+            if (manager.gameObject.activeInHierarchy)
+            {
+                manager.CallOnManagerAwake(); // 새로운 public 메서드 필요
+            }
+
             Debug.Log($"[GameManager] Initialized: {manager.GetType().Name} (Priority: {manager.InitializationPriority})");
         }
 
-        // 4. 참조 설정
         uiManager = uiMgr;
         worldManager = worldMgr;
 
@@ -143,16 +138,12 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
         allManagers.Clear();
         isInitialized = false;
     }
-    #endregion
 
-    #region Public API
     public T GetManager<T>() where T : class
     {
         return allManagers.FirstOrDefault(m => m is T) as T;
     }
-    #endregion
 
-    #region Scene Event Management
     private void RegisterSceneEvents()
     {
         SceneManager.sceneLoaded += OnSceneLoaded;
@@ -202,41 +193,44 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
             }
         }
     }
-    #endregion
 
-    #region Partial Methods for Project Extension
     partial void InitializeProject();
     partial void ShutdownProject();
-    #endregion
 }
+
 public partial class GameManager
 {
-    #region Project Specific Fields
     [Header("Project Managers")]
     [SerializeField] private EffectManager effectManager;
     [SerializeField] private EffectRunner effectRunner;
-    // 추가 매니저들...
-    #endregion
+    [SerializeField] private ModifierManager modifierManager;
 
-    #region Project Static Properties
     public static EffectManager Effect => Instance?.effectManager;
     public static EffectRunner EffectRunner => Instance?.effectRunner;
-    // 추가 정적 접근자들...
-    #endregion
+    public static ModifierManager Modifier => Instance?.modifierManager;
 
-    #region Project Implementation
     partial void InitializeProject()
     {
-        // 프로젝트별 매니저 참조 설정
         effectManager = GetManager<EffectManager>();
         effectRunner = GetManager<EffectRunner>();
+        modifierManager = GetManager<ModifierManager>();
 
-        // 게임별 초기화 로직...
+        if (modifierManager == null)
+        {
+            Debug.LogError("[GameManager] ModifierManager not found! Please add ModifierManager component to the scene.");
+        }
+        else
+        {
+            Debug.Log("[GameManager] ModifierManager successfully initialized");
+        }
+
+        // 참조 설정 완료 플래그
+        isProjectInitialized = true; // 이제 접근 가능
+        Debug.Log("[GameManager] Project initialization completed - managers ready");
     }
 
     partial void ShutdownProject()
     {
-        // 게임별 종료 로직...
+        isProjectInitialized = false;
     }
-    #endregion
 }

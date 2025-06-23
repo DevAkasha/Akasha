@@ -59,25 +59,16 @@ public interface IModelOwner  // GetComponent용 엔티티 인터페이스
 
 public interface IModelOwner<M> : IModelOwner where M : BaseModel // 모델을 소유하는 엔티티 인터페이스
 {
-    public M Model { get; set; }
-
-    public M GetModel(); //현재 모델 반환
+    M Model { get; }
 }
 
-
-// 뷰모델 기본 인터페이스
-public interface IViewModel
+public interface IUIComponent
 {
     void SetOwner(BaseView owner);
-    void BindToModel(BaseModel model);
     void Cleanup();
-    Type ModelType { get; }
 }
 
-// 뷰필드 기본 인터페이스
-public interface IViewField
+public interface IBindable<T> : IUIComponent
 {
-    void SetOwner(BaseView owner);
-    void SetFieldName(string fieldName);
-    void Cleanup();
+    void Bind(T data);
 }

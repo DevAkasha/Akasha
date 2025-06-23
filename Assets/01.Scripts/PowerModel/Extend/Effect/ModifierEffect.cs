@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-
-
 public class ModifierEffect : BaseEffect
 {
     public EffectApplyMode Mode { get; private set; }
@@ -113,14 +111,7 @@ public class ModifierEffect : BaseEffect
                 if (modifiable is IRxField field &&
                     field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (Stackable && StackBehavior == StackBehavior.Stack)
-                    {
-                        modifiable.SetStackModifier(modifier.Type, Key, modifier.Value);
-                    }
-                    else
-                    {
-                        modifiable.SetModifier(modifier.Type, Key, modifier.Value, StackBehavior);
-                    }
+                    modifiable.SetModifier(Key, modifier.Type, modifier.Value, StackBehavior);
                 }
             }
         }
@@ -151,7 +142,7 @@ public class ModifierEffect : BaseEffect
 
             try
             {
-                modifiable.RemoveModifier(Key);
+                modifiable.RemoveModifier(Key, 0);
             }
             catch (Exception e)
             {
@@ -179,7 +170,7 @@ public class ModifierEffect : BaseEffect
                 if (modifiable is IRxField field &&
                     field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
                 {
-                    modifiable.SetStackModifier(modifier.Type, Key, modifier.Value, stackId);
+                    modifiable.SetModifier(Key, modifier.Type, modifier.Value, StackBehavior.Stack);
                 }
             }
         }

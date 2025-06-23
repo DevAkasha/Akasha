@@ -7,16 +7,14 @@ using UnityEngine.SceneManagement;
 
 public class EffectRunner : ManagerBase
 {
-    public override int InitializationPriority => 15; // EffectManager 다음에 초기화
+    public override int InitializationPriority => 15;
 
     private readonly Dictionary<(ModifierKey, IModelOwner), Coroutine> activeEffects = new();
     private EffectManager effectManager;
 
-    #region Manager Lifecycle
     protected override void OnManagerAwake()
     {
         base.OnManagerAwake();
-        // EffectManager는 우선도가 더 높아서 이미 초기화되어 있음
         effectManager = GameManager.Effect;
 
         if (effectManager == null)
@@ -34,13 +32,9 @@ public class EffectRunner : ManagerBase
     public override void OnSceneUnloaded(Scene scene)
     {
         base.OnSceneUnloaded(scene);
-
-        // 씬이 언로드될 때 해당 씬의 객체들과 관련된 효과들 정리
         CleanupEffectsForScene(scene);
     }
-    #endregion
 
-    #region Timed Effects
     public void RegisterTimedEffect(ModifierEffect effect, IModelOwner target)
     {
         if (target == null)
@@ -96,39 +90,30 @@ public class EffectRunner : ManagerBase
 
     private IEnumerator RunEffect(ModifierEffect effect, IModelOwner target)
     {
-        // 효과가 이미 적용되었다고 가정 (ModifierEffect.ApplyTo 메서드에서 적용됨)
-
-        // 제거 트리거가 있는 경우 해당 조건 체크
         if (effect.RemoveTrigger != null)
         {
             yield return CheckRemoveTrigger(effect.RemoveTrigger);
         }
-        // 그렇지 않으면 지정된 지속 시간 동안 대기
         else
         {
             yield return new WaitForSeconds(effect.Duration);
         }
 
-        // 효과 제거
         effect.RemoveFrom(target);
         Debug.Log($"[EffectRunner] <color=yellow>Effect END</color> - {effect.Key}");
 
-        // 활성 효과 목록에서 제거
         var key = (effect.Key, target);
         activeEffects.Remove(key);
     }
 
     private IEnumerator CheckRemoveTrigger(Func<bool> trigger)
     {
-        // 트리거 조건이 참이 될 때까지 주기적으로 체크
         while (!trigger())
         {
             yield return new WaitForSeconds(0.2f);
         }
     }
-    #endregion
 
-    #region Interpolated Effects
     public void RegisterInterpolatedEffect(ModifierEffect effect, IModelOwner target)
     {
         if (target == null)
@@ -159,19 +144,13 @@ public class EffectRunner : ManagerBase
         float elapsedTime = 0f;
         ModifierKey key = effect.Key;
 
-        // ModifierEffect에 등록된 필드 목록
         var modifiers = effect.Modifiers;
 
-        // 진행 시간(0~duration)에 따라 보간값 적용
         while (elapsedTime < duration)
         {
-            // 정규화된 시간 값 (0~1 사이)
             float normalizedTime = elapsedTime / duration;
-
-            // 보간 함수를 통해 현재 시간에 해당하는 값 계산
             float interpolatedValue = effect.Interpolator.Invoke(normalizedTime);
 
-            // 모든 수정 가능한 필드에 보간된 값 적용
             foreach (var modifiable in target.GetModifiables())
             {
                 if (modifiable is not IRxField rxField)
@@ -179,7 +158,6 @@ public class EffectRunner : ManagerBase
 
                 foreach (var modifier in modifiers)
                 {
-                    // 필드명이 일치할 경우에만 적용
                     if (!string.Equals(rxField.FieldName, modifier.FieldName, StringComparison.OrdinalIgnoreCase))
                         continue;
 
@@ -187,7 +165,7 @@ public class EffectRunner : ManagerBase
                     {
                         try
                         {
-                            mod.SetModifier(modifier.Type, key, interpolatedValue);
+                            mod.SetModifier(key, modifier.Type, interpolatedValue);
                         }
                         catch (Exception e)
                         {
@@ -197,22 +175,18 @@ public class EffectRunner : ManagerBase
                 }
             }
 
-            // 시간 업데이트
             elapsedTime += Time.deltaTime;
             yield return null;
         }
 
-        // 종료 시 모든 modifier 제거
         foreach (var modifiable in target.GetModifiables())
         {
-            modifiable.RemoveModifier(key);
+            modifiable.RemoveModifier(key, 0);
         }
 
         Debug.Log($"[EffectRunner] Interpolated effect removed: {key}");
     }
-    #endregion
 
-    #region Effect Control
     public bool CancelEffect(ModifierKey effectKey, IModelOwner target)
     {
         var key = (effectKey, target);
@@ -222,7 +196,6 @@ public class EffectRunner : ManagerBase
             StopCoroutine(coroutine);
             activeEffects.Remove(key);
 
-            // 효과 제거
             if (effectManager != null && effectManager.TryGetEffect(effectKey, out var effect))
             {
                 effect.RemoveFrom(target);
@@ -236,7 +209,6 @@ public class EffectRunner : ManagerBase
 
     public void CancelAllEffects(IModelOwner target)
     {
-        // 대상과 관련된 모든 키 수집
         var keysToRemove = new List<(ModifierKey, IModelOwner)>();
 
         foreach (var pair in activeEffects)
@@ -248,7 +220,6 @@ public class EffectRunner : ManagerBase
                 keysToRemove.Add(pair.Key);
                 StopCoroutine(pair.Value);
 
-                // 효과 제거
                 if (effectManager != null && effectManager.TryGetEffect(effectKey, out var effect))
                 {
                     effect.RemoveFrom(target);
@@ -256,7 +227,6 @@ public class EffectRunner : ManagerBase
             }
         }
 
-        // 활성 효과 목록에서 제거
         foreach (var key in keysToRemove)
         {
             activeEffects.Remove(key);
@@ -282,9 +252,7 @@ public class EffectRunner : ManagerBase
 
         activeEffects.Clear();
     }
-    #endregion
 
-    #region Scene Cleanup
     private void CleanupEffectsForScene(Scene scene)
     {
         var keysToRemove = new List<(ModifierKey, IModelOwner)>();
@@ -293,7 +261,6 @@ public class EffectRunner : ManagerBase
         {
             var (effectKey, target) = pair.Key;
 
-            // 대상이 언로드된 씬에 속하는지 확인
             if (target != null && target is MonoBehaviour mb && mb.gameObject.scene == scene)
             {
                 keysToRemove.Add(pair.Key);
@@ -311,9 +278,7 @@ public class EffectRunner : ManagerBase
             Debug.Log($"[EffectRunner] Cleaned up {keysToRemove.Count} effects for scene: {scene.name}");
         }
     }
-    #endregion
 
-    #region Query & Debug
     public bool HasActiveEffect(ModifierKey effectKey, IModelOwner target)
     {
         return activeEffects.ContainsKey((effectKey, target));
@@ -370,5 +335,4 @@ public class EffectRunner : ManagerBase
         }
     }
 #endif
-    #endregion
 }

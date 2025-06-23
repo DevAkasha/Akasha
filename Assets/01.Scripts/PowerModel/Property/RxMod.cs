@@ -4,16 +4,11 @@ using System.Runtime.CompilerServices;
 
 public interface IModifiable
 {
-    void SetModifier(ModifierType type, ModifierKey key, float value);
-    void SetModifier(ModifierType type, ModifierKey key, float value, StackBehavior stackBehavior);
-    void SetStackModifier(ModifierType type, ModifierKey key, float value, int stackId = -1);
-    void RemoveModifier(ModifierKey key);
+    void SetModifier(ModifierKey key, ModifierType type, float value);
+    void SetModifier(ModifierKey key, ModifierType type, float value, StackBehavior behavior);
     void RemoveModifier(ModifierKey key, int stackId);
-    void RemoveModifier(ModifierType type, ModifierKey key);
-    void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate);
-    int GetStackCount(ModifierKey baseKey);
-    bool HasStack(ModifierKey baseKey);
-    IEnumerable<ModifierData> GetModifiersByBaseKey(ModifierKey baseKey);
+    bool HasModifier(ModifierKey key);
+    int GetStackCount(ModifierKey key);
 }
 
 public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
@@ -71,63 +66,53 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         listeners.Remove(listener);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetModifier(ModifierType type, ModifierKey key, float value)
+    public void SetModifier(ModifierKey key, ModifierType type, float value)
     {
         ModifierManager?.SetModifier(instanceId, type, key, value);
         Recalculate();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetModifier(ModifierType type, ModifierKey key, float value, StackBehavior stackBehavior)
+    public void SetModifier(ModifierKey key, ModifierType type, float value, StackBehavior behavior)
     {
-        ModifierManager?.SetModifier(instanceId, type, key, value, stackBehavior);
+        ModifierManager?.SetModifier(instanceId, type, key, value, behavior);
         Recalculate();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetStackModifier(ModifierType type, ModifierKey key, float value, int stackId = -1)
-    {
-        ModifierManager?.SetStackModifier(instanceId, type, key, value, stackId);
-        Recalculate();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveModifier(ModifierKey key)
     {
         if (ModifierManager?.RemoveByBaseKey(instanceId, key) == true)
             Recalculate();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool HasModifier(ModifierKey key)
+    {
+        return ModifierManager?.ContainsBaseKey(instanceId, key) ?? false;
+    }
+
+    public int GetStackCount(ModifierKey key)
+    {
+        return ModifierManager?.GetStackCount(instanceId, key) ?? 0;
+    }
+
+    // 기존 고급 기능들 유지 (하위 호환성)
+    public void SetStackModifier(ModifierKey key, ModifierType type, float value, int stackId = -1)
+    {
+        ModifierManager?.SetStackModifier(instanceId, type, key, value, stackId);
+        Recalculate();
+    }
+
     public void RemoveModifier(ModifierKey key, int stackId)
     {
         if (ModifierManager?.RemoveModifier(instanceId, key, stackId) == true)
             Recalculate();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RemoveModifier(ModifierType type, ModifierKey key)
-    {
-        if (ModifierManager?.RemoveModifier(instanceId, type, key) == true)
-            Recalculate();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveModifiersByPredicate(Func<ModifierData, bool> predicate)
     {
         if (ModifierManager?.RemoveModifiersByPredicate(instanceId, predicate) > 0)
             Recalculate();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RemoveAllModifiersOfType(ModifierType type)
-    {
-        if (ModifierManager?.RemoveAllModifiersOfType(instanceId, type) > 0)
-            Recalculate();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ClearAll()
     {
         ModifierManager?.Clear(instanceId);
@@ -154,15 +139,6 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void ResetValue(T newValue)
-    {
-        origin = newValue;
-        ModifierManager?.Clear(instanceId);
-        cachedValue = newValue;
-        NotifyAll(cachedValue);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Recalculate()
     {
         T oldValue = cachedValue;
@@ -183,68 +159,6 @@ public sealed class RxMod<T> : RxBase, IModifiable, IRxField<T>
         for (int i = 0; i < listeners.Count; i++)
         {
             listeners[i](value);
-        }
-    }
-
-    public bool TryGetModifierInfo(ModifierKey key, out ModifierData data, int stackId = 0)
-    {
-        if (ModifierManager != null)
-            return ModifierManager.TryGetModifier(instanceId, key, out data, stackId);
-
-        data = default;
-        return false;
-    }
-
-    public Span<ModifierData> GetAllModifiersInfo()
-    {
-        if (ModifierManager == null)
-            return Span<ModifierData>.Empty;
-
-        return ModifierManager.GetAllModifiers(instanceId);
-    }
-
-    public IEnumerable<ModifierData> GetModifiersByBaseKey(ModifierKey baseKey)
-    {
-        if (ModifierManager == null)
-            return Array.Empty<ModifierData>();
-
-        return ModifierManager.GetModifiersByBaseKey(instanceId, baseKey);
-    }
-
-    public int GetStackCount(ModifierKey baseKey)
-    {
-        if (ModifierManager == null)
-            return 0;
-
-        return ModifierManager.GetStackCount(instanceId, baseKey);
-    }
-
-    public bool HasStack(ModifierKey baseKey)
-    {
-        return GetStackCount(baseKey) > 0;
-    }
-
-    public bool HasMultipleStacks(ModifierKey baseKey)
-    {
-        return GetStackCount(baseKey) > 1;
-    }
-
-    public string DebugFormula
-    {
-        get
-        {
-            float baseValue = calculator.ToFloat(origin);
-            return ModifierManager?.GetDebugFormula(instanceId, baseValue) ?? $"{baseValue:F2}";
-        }
-    }
-
-    public string DetailedDebugInfo
-    {
-        get
-        {
-            float baseValue = calculator.ToFloat(origin);
-            return ModifierManager?.GetDetailedDebugInfo(instanceId, FieldName ?? "Unknown", baseValue)
-                   ?? $"RxMod<{typeof(T).Name}> '{FieldName}': {Value} (No ModifierManager)";
         }
     }
 

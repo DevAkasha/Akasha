@@ -1,97 +1,86 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
-#region 수정된 BaseView
-/// <summary>
-/// 개선된 ViewModel을 지원하는 BaseView
-/// </summary>
+using UnityEngine.UIElements;
+
 public abstract class BaseView : MonoBehaviour
 {
     [Header("View Settings")]
     [SerializeField] protected bool enableDebugLogs = false;
 
     private BasePresenter owner;
-    private readonly List<IViewModel> ownedViewModels = new();
-    private readonly List<IViewSlot> ownedViewSlots = new();
+    private readonly List<IUIComponent> ownedComponents = new(); 
     private bool isInitialized = false;
 
-    #region Ownership
     public void SetOwner(BasePresenter presenter)
     {
         owner = presenter;
     }
 
     public BasePresenter Owner => owner;
-    #endregion
 
-    #region ViewModel Management
-    protected T CreateViewModel<T>() where T : class, IViewModel, new()
+
+    protected T CreateComponent<T>() where T : class, IUIComponent, new()
+    {
+        var component = new T();
+        component.SetOwner(this);
+        ownedComponents.Add(component);
+
+        LogDebug($"Created component: {typeof(T).Name}");
+        return component;
+    }
+    protected T CreateViewModel<T>() where T : class, IBindable<BaseModel>, new()
     {
         var viewModel = new T();
         viewModel.SetOwner(this);
-        ownedViewModels.Add(viewModel);
+        ownedComponents.Add(viewModel);
 
         LogDebug($"Created ViewModel: {typeof(T).Name}");
         return viewModel;
     }
 
-    protected void DestroyViewModel(IViewModel viewModel)
+    protected T CreateViewField<T>(string fieldName) where T : class, IBindable<RxBase>, new()
     {
-        if (viewModel != null && ownedViewModels.Contains(viewModel))
-        {
-            LogDebug($"Destroying ViewModel: {viewModel.GetType().Name}");
-
-            viewModel.Cleanup();
-            ownedViewModels.Remove(viewModel);
-        }
-    }
-
-    protected T GetViewModel<T>() where T : class, IViewModel
-    {
-        foreach (var vm in ownedViewModels)
-        {
-            if (vm is T targetVm)
-                return targetVm;
-        }
-        return null;
-    }
-    #endregion
-
-    #region ViewSlot Management
-    protected T CreateViewSlot<T>(string fieldName) where T : class, IViewSlot, new()
-    {
-        var viewSlot = new T();
-        viewSlot.SetOwner(this);
-        viewSlot.SetFieldName(fieldName);
-        ownedViewSlots.Add(viewSlot);
+        var viewField = new T();
+        viewField.SetOwner(this);
+        ownedComponents.Add(viewField);
 
         LogDebug($"Created ViewSlot: {typeof(T).Name} for field '{fieldName}'");
-        return viewSlot;
+        return viewField;
     }
 
-    protected void DestroyViewSlot(IViewSlot viewSlot)
+    protected void DestroyComponent(IUIComponent component)
     {
-        if (viewSlot != null && ownedViewSlots.Contains(viewSlot))
+        if (component != null && ownedComponents.Contains(component))
         {
-            LogDebug($"Destroying ViewSlot: {viewSlot.GetType().Name}");
+            LogDebug($"Destroying component: {component.GetType().Name}");
 
-            viewSlot.Cleanup();
-            ownedViewSlots.Remove(viewSlot);
+            component.Cleanup();
+            ownedComponents.Remove(component);
         }
     }
-
-    protected T GetViewSlot<T>() where T : class, IViewSlot
+    protected T GetUIComponent<T>() where T : class, IUIComponent
     {
-        foreach (var vs in ownedViewSlots)
+        foreach (var component in ownedComponents)
         {
-            if (vs is T targetVs)
-                return targetVs;
+            if (component is T targetComponent)
+                return targetComponent;
         }
         return null;
     }
-    #endregion
 
-    #region Unity Lifecycle
+    // 편의 메서드들
+    protected T GetViewModel<T>() where T : class, IBindable<BaseModel>
+    {
+        return GetUIComponent<T>();
+    }
+
+    protected T GetViewField<T>() where T : class, IBindable<RxBase>
+    {
+        return GetUIComponent<T>();
+    }
+
     protected virtual void Start()
     {
         Initialize();
@@ -101,17 +90,14 @@ public abstract class BaseView : MonoBehaviour
     {
         Cleanup();
     }
-    #endregion
 
-    #region View Lifecycle
     protected virtual void Initialize()
     {
         if (isInitialized) return;
 
         LogDebug($"Initializing view: {GetType().Name}");
 
-        SetupViewModels();
-        SetupViewSlots();
+        SetupComponents();
         AtInit();
 
         isInitialized = true;
@@ -126,28 +112,19 @@ public abstract class BaseView : MonoBehaviour
 
         AtDestroy();
 
-        // 모든 ViewModel 정리
-        foreach (var vm in ownedViewModels)
-            vm?.Cleanup();
-        ownedViewModels.Clear();
-
-        // 모든 ViewSlot 정리
-        foreach (var vs in ownedViewSlots)
-            vs?.Cleanup();
-        ownedViewSlots.Clear();
+        foreach (var component in ownedComponents)
+            component?.Cleanup();
+        ownedComponents.Clear();
 
         isInitialized = false;
         LogDebug($"View {GetType().Name} cleaned up");
     }
 
-    protected abstract void SetupViewModels();
-    protected abstract void SetupViewSlots();
-
+    // 하위 클래스에서 구현할 메서드들
+    protected abstract void SetupComponents();
     protected virtual void AtInit() { }
     protected virtual void AtDestroy() { }
-    #endregion
 
-    #region UI Control
     public virtual void Show()
     {
         if (!isInitialized)
@@ -169,30 +146,19 @@ public abstract class BaseView : MonoBehaviour
 
     protected virtual void OnShow() { }
     protected virtual void OnHide() { }
-    #endregion
 
-    #region Model Data Change Notification - 개선된 이벤트 처리
-    /// <summary>
-    /// ViewModel에서 Model 레벨 이벤트 발생 시 호출
-    /// </summary>
-    public virtual void OnModelDataChanged(IViewModel viewModel)
+    // 컴포넌트에서 발생한 이벤트 처리
+    public virtual void OnComponentEvent(IUIComponent component, string eventType, object eventData)
     {
-        LogDebug($"Model event from ViewModel: {viewModel.GetType().Name}");
-
-        // 하위 클래스에서 ViewModel별 이벤트 처리
-        HandleViewModelEvent(viewModel);
+        LogDebug($"Component event from {component.GetType().Name}: {eventType}");
+        HandleComponentEvent(component, eventType, eventData);
     }
 
-    /// <summary>
-    /// 하위 클래스에서 오버라이드하여 ViewModel별 이벤트 처리
-    /// </summary>
-    protected virtual void HandleViewModelEvent(IViewModel viewModel)
+    protected virtual void HandleComponentEvent(IUIComponent component, string eventType, object eventData)
     {
-        // 기본 구현 - 하위 클래스에서 필요시 오버라이드
+        // 하위 클래스에서 오버라이드하여 컴포넌트별 이벤트 처리
     }
-    #endregion
 
-    #region Utility Methods
     protected void LogDebug(string message)
     {
         if (enableDebugLogs)
@@ -210,12 +176,14 @@ public abstract class BaseView : MonoBehaviour
     {
         Debug.LogError($"[{GetType().Name}] {message}");
     }
-    #endregion
 
-    #region Properties
     public bool IsInitialized => isInitialized;
-    public IReadOnlyList<IViewModel> ViewModels => ownedViewModels.AsReadOnly();
-    public IReadOnlyList<IViewSlot> ViewSlots => ownedViewSlots.AsReadOnly();
-    #endregion
+    public IReadOnlyList<IUIComponent> Components => ownedComponents.AsReadOnly();
+
+    // 타입별 컴포넌트 조회를 위한 편의 프로퍼티
+    public IEnumerable<IBindable<BaseModel>> ViewModels =>
+        ownedComponents.OfType<IBindable<BaseModel>>();
+
+    public IEnumerable<IUIComponent> ViewSlots =>
+        ownedComponents.Where(c => !(c is IBindable<BaseModel>));
 }
-#endregion

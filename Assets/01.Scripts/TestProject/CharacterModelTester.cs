@@ -79,25 +79,23 @@ public class CharacterModelTester : MonoBehaviour
         Debug.Log($"기본 공격력: {testCharacter.Attack.Value}");
 
         var weaponKey = ModifierKey.Create(TestEffectId.IronSword);
-        testCharacter.Attack.SetModifier(ModifierType.OriginAdd, weaponKey, 15);
+        testCharacter.Attack.SetModifier(weaponKey, ModifierType.OriginAdd, 15);
         Debug.Log($"무기 장착 후 공격력: {testCharacter.Attack.Value}");
 
         var buffKey = ModifierKey.Create(TestEffectId.StrengthBuff);
-        testCharacter.Attack.SetModifier(ModifierType.Multiplier, buffKey, 2);
+        testCharacter.Attack.SetModifier(buffKey, ModifierType.Multiplier, 2);
         Debug.Log($"버프 적용 후 공격력: {testCharacter.Attack.Value}");
 
         var bonusKey = ModifierKey.Create(TestEffectId.CombatBonus);
-        testCharacter.Attack.SetModifier(ModifierType.FinalAdd, bonusKey, 10);
+        testCharacter.Attack.SetModifier(bonusKey, ModifierType.FinalAdd, 10);
         Debug.Log($"최종 보너스 후 공격력: {testCharacter.Attack.Value}");
 
-        Debug.Log($"계산 공식: {testCharacter.Attack.DebugFormula}");
-
-        testCharacter.Attack.RemoveModifier(ModifierType.Multiplier, buffKey);
+        testCharacter.Attack.RemoveModifier(buffKey, 0);
         Debug.Log($"버프 해제 후 공격력: {testCharacter.Attack.Value}");
 
         Debug.Log($"기본 이동속도: {testCharacter.MoveSpeed.Value}");
         var bootsKey = ModifierKey.Create(TestEffectId.LeatherBoots);
-        testCharacter.MoveSpeed.SetModifier(ModifierType.AddMultiplier, bootsKey, 0.3f);
+        testCharacter.MoveSpeed.SetModifier(bootsKey, ModifierType.AddMultiplier, 0.3f);
         Debug.Log($"부츠 착용 후 이동속도: {testCharacter.MoveSpeed.Value}");
     }
 
@@ -194,12 +192,12 @@ public class CharacterModelTester : MonoBehaviour
         for (int i = 0; i < 100; i++)
         {
             var key = ModifierKey.Create($"StressTest_{i}");
-            testCharacter.Attack.SetModifier(ModifierType.OriginAdd, key, i % 10);
+            testCharacter.Attack.SetModifier(key, ModifierType.OriginAdd, i % 10);
         }
         Debug.Log($"100개 수정자 적용 후 공격력: {testCharacter.Attack.Value}");
 
         Debug.Log("수정자 대량 제거 테스트...");
-        testCharacter.Attack.RemoveAllModifiersOfType(ModifierType.OriginAdd);
+        testCharacter.Attack.ClearAll();
         Debug.Log($"수정자 제거 후 공격력: {testCharacter.Attack.Value}");
 
         Debug.Log("빠른 상태 변화 테스트...");
@@ -278,14 +276,14 @@ public class CharacterModelTester : MonoBehaviour
         {
             var weaponKey = ModifierKey.Create(TestEffectId.IronSword);
 
-            if (testCharacter.Attack.TryGetModifierInfo(weaponKey, out var existingModifier))
+            if (testCharacter.Attack.HasModifier(weaponKey))
             {
-                testCharacter.Attack.RemoveModifier(weaponKey);
+                testCharacter.Attack.RemoveModifier(weaponKey, 0);
                 Debug.Log("무기 효과 제거됨");
             }
             else
             {
-                testCharacter.Attack.SetModifier(ModifierType.OriginAdd, weaponKey, 15);
+                testCharacter.Attack.SetModifier(weaponKey, ModifierType.OriginAdd, 15);
                 Debug.Log("무기 효과 적용됨");
             }
         }
@@ -330,10 +328,23 @@ public class CharacterModelTester : MonoBehaviour
         if (testCharacter != null)
         {
             Debug.Log("=== 공격력 수정자 상세 정보 ===");
-            Debug.Log(testCharacter.Attack.DetailedDebugInfo);
+            Debug.Log($"현재 값: {testCharacter.Attack.Value}");
+            Debug.Log($"스택 수 체크 예시:");
+
+            var weaponKey = ModifierKey.Create(TestEffectId.IronSword);
+            var buffKey = ModifierKey.Create(TestEffectId.StrengthBuff);
+            var bonusKey = ModifierKey.Create(TestEffectId.CombatBonus);
+
+            Debug.Log($"  무기 효과 ({weaponKey}): {(testCharacter.Attack.HasModifier(weaponKey) ? "적용됨" : "없음")} - 스택수: {testCharacter.Attack.GetStackCount(weaponKey)}");
+            Debug.Log($"  버프 효과 ({buffKey}): {(testCharacter.Attack.HasModifier(buffKey) ? "적용됨" : "없음")} - 스택수: {testCharacter.Attack.GetStackCount(buffKey)}");
+            Debug.Log($"  보너스 효과 ({bonusKey}): {(testCharacter.Attack.HasModifier(bonusKey) ? "적용됨" : "없음")} - 스택수: {testCharacter.Attack.GetStackCount(bonusKey)}");
 
             Debug.Log("=== 이동속도 수정자 상세 정보 ===");
-            Debug.Log(testCharacter.MoveSpeed.DetailedDebugInfo);
+            Debug.Log($"현재 값: {testCharacter.MoveSpeed.Value}");
+            Debug.Log($"스택 수 체크 예시:");
+
+            var bootsKey = ModifierKey.Create(TestEffectId.LeatherBoots);
+            Debug.Log($"  부츠 효과 ({bootsKey}): {(testCharacter.MoveSpeed.HasModifier(bootsKey) ? "적용됨" : "없음")} - 스택수: {testCharacter.MoveSpeed.GetStackCount(bootsKey)}");
         }
     }
 

@@ -3,10 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-/// <summary>
-/// 모든 관리 대상 객체의 기본 클래스
-/// ContainerManager와 완전 통합된 메타데이터 관리 시스템
-/// </summary>
 public class AggregateRoot : MonoBehaviour
 {
     [Header("Object Identity")]
@@ -28,7 +24,6 @@ public class AggregateRoot : MonoBehaviour
     private string createdScene;
     private bool isRegisteredToManager = false;
 
-    #region Properties
     public string AggregateId => string.IsNullOrEmpty(customAggregateId)
         ? $"{GetType().Name}_{GetInstanceID()}"
         : customAggregateId;
@@ -41,9 +36,7 @@ public class AggregateRoot : MonoBehaviour
 
     public IReadOnlyCollection<string> Groups => groups;
     public IReadOnlyCollection<ObjectTag> Tags => tags;
-    #endregion
 
-    #region Unity Lifecycle
     protected virtual void Awake()
     {
         InitializeMetadata();
@@ -92,18 +85,14 @@ public class AggregateRoot : MonoBehaviour
         }
         OnDisableComplete();
     }
-    #endregion
 
-    #region Lifecycle Hooks
     protected virtual void OnAwakeComplete() { }
     protected virtual void OnStartComplete() { }
     protected virtual void OnEnableComplete() { }
     protected virtual void OnDisableComplete() { }
     protected virtual void OnDestroyComplete() { }
     protected virtual void OnStateChanged(ObjectState oldState, ObjectState newState) { }
-    #endregion
 
-    #region Initialization
     private void InitializeMetadata()
     {
         createdTime = DateTime.Now;
@@ -135,9 +124,7 @@ public class AggregateRoot : MonoBehaviour
         SetMetadata("TypeName", GetType().Name);
         SetMetadata("InstanceID", GetInstanceID());
     }
-    #endregion
 
-    #region Auto Registration
     private void AutoRegisterToManager()
     {
         try
@@ -183,9 +170,7 @@ public class AggregateRoot : MonoBehaviour
             Debug.LogError($"[{AggregateId}] Auto-unregistration failed: {ex.Message}");
         }
     }
-    #endregion
 
-    #region Group Management
     public bool AddToGroup(string groupName)
     {
         if (string.IsNullOrEmpty(groupName)) return false;
@@ -222,9 +207,7 @@ public class AggregateRoot : MonoBehaviour
             NotifyManagerGroupChange(group, false);
         }
     }
-    #endregion
 
-    #region Tag Management
     public bool AddTag(ObjectTag tag)
     {
         bool added = tags.Add(tag);
@@ -259,9 +242,7 @@ public class AggregateRoot : MonoBehaviour
             NotifyManagerTagChange(tag, false);
         }
     }
-    #endregion
 
-    #region Metadata Management
     public void SetMetadata<T>(string key, T value)
     {
         if (string.IsNullOrEmpty(key)) return;
@@ -280,9 +261,7 @@ public class AggregateRoot : MonoBehaviour
     public bool HasMetadata(string key) => metadata.ContainsKey(key);
     public bool RemoveMetadata(string key) => metadata.Remove(key);
     public Dictionary<string, object> GetAllMetadata() => new Dictionary<string, object>(metadata);
-    #endregion
 
-    #region State Management
     private void ChangeState(ObjectState newState)
     {
         if (currentState == newState) return;
@@ -298,9 +277,7 @@ public class AggregateRoot : MonoBehaviour
     {
         ChangeState(newState);
     }
-    #endregion
 
-    #region Manager Communication
     internal ContainerItemInfo CreateItemInfo()
     {
         return new ContainerItemInfo
@@ -332,9 +309,7 @@ public class AggregateRoot : MonoBehaviour
         if (Enum.TryParse<ObjectTag>(tagName, out var tag))
             tags.Remove(tag);
     }
-    #endregion
 
-    #region Manager Notification
     private void NotifyManagerGroupChange(string groupName, bool added)
     {
         if (!isRegisteredToManager) return;
@@ -418,9 +393,7 @@ public class AggregateRoot : MonoBehaviour
             _ => ItemState.Unknown
         };
     }
-    #endregion
 
-    #region Utility
     public override string ToString()
     {
         return $"{GetType().Name}(ID:{AggregateId}, State:{currentState}, Groups:{groups.Count}, Tags:{tags.Count})";
@@ -442,7 +415,6 @@ public class AggregateRoot : MonoBehaviour
                $"  Metadata: {metadata.Count} items\n" +
                $"  Registered: {isRegisteredToManager}";
     }
-    #endregion
 }
 
 // 상태 및 태그 정의

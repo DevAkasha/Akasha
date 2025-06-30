@@ -1,455 +1,202 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
-public class AggregateRoot : MonoBehaviour
+public enum AggregateType
 {
-    [Header("Object Identity")]
-    [SerializeField] private string customAggregateId = "";
-    [SerializeField] private bool autoRegister = true;
+    Controller,
+    Presenter,
+    Entity,
+    Part,
+    System,
+    Unknown
+}
 
-    [Header("Initial Setup")]
-    [SerializeField] private List<string> initialGroups = new();
-    [SerializeField] private List<ObjectTag> initialTags = new();
+public abstract class AggregateRoot : MonoBehaviour
+{
+    [Header("Aggregate Identity")]
+    [SerializeField] private AggregateType aggregateType = AggregateType.Unknown;
+    [SerializeField] private int aggregateIndex = -1;
+    [SerializeField] private int instanceId = -1;
 
-    // 내부 데이터 (ContainerManager와 동기화됨)
-    private readonly HashSet<string> groups = new();
-    private readonly HashSet<ObjectTag> tags = new();
-    private readonly Dictionary<string, object> metadata = new();
+    [Header("Logic Flags")]
+    [SerializeField] private bool isSceneCreated = true;
+    [SerializeField] private bool enablePooling = false;
+    [SerializeField] private bool enableInitialization = true;
+    [SerializeField] private bool enableSaveLoad = false;
 
-    // 상태 정보
-    private ObjectState currentState = ObjectState.Created;
-    private DateTime createdTime;
-    private string createdScene;
-    private bool isRegisteredToManager = false;
+    [Header("Meta State")]
+    [SerializeField] private bool isInPool = false;
+    [SerializeField] private bool isInitialized = false;
 
-    public string AggregateId => string.IsNullOrEmpty(customAggregateId)
-        ? $"{GetType().Name}_{GetInstanceID()}"
-        : customAggregateId;
+    private Transform cachedTransform;
+    private static int nextInstanceId = 1;
 
-    public string TypedId => $"{GetType().Name}_{GetInstanceID()}";
-    public ObjectState State => currentState;
-    public DateTime CreatedTime => createdTime;
-    public string CreatedScene => createdScene;
-    public bool IsRegistered => isRegisteredToManager;
-
-    public IReadOnlyCollection<string> Groups => groups;
-    public IReadOnlyCollection<ObjectTag> Tags => tags;
+    public AggregateType AggregateType => aggregateType;
+    public int AggregateIndex => aggregateIndex;
+    public int InstanceId => instanceId;
+    public bool IsSceneCreated => isSceneCreated;
+    public bool EnablePooling => enablePooling;
+    public bool EnableInitialization => enableInitialization;
+    public bool EnableSaveLoad => enableSaveLoad;
+    public new Transform transform => cachedTransform ?? (cachedTransform = base.transform);
+    public bool IsInPool => isInPool;
+    public bool IsInitialized => isInitialized;
 
     protected virtual void Awake()
     {
-        InitializeMetadata();
-        OnAwakeComplete();
+        InitializeIdentity();
+
+        if (enableInitialization)
+        {
+            PerformInitialization();
+        }
+    }
+
+    private void InitializeIdentity()
+    {
+        if (instanceId == -1)
+        {
+            instanceId = nextInstanceId++;
+        }
+
+        if (aggregateType == AggregateType.Unknown)
+        {
+            aggregateType = DetermineAggregateType();
+        }
+
+        if (aggregateIndex == -1)
+        {
+            aggregateIndex = AssignAggregateIndex();
+        }
+
+        cachedTransform = base.transform;
+    }
+
+    private AggregateType DetermineAggregateType()
+    {
+        if (this is Controller) return AggregateType.Controller;
+        if (this is Presenter) return AggregateType.Presenter;
+        if (this is BaseEntity) return AggregateType.Entity;
+        if (this is BasePart) return AggregateType.Part;
+        return AggregateType.System;
+    }
+
+    private int AssignAggregateIndex()
+    {
+        var manager = GetResponsibleManager();
+        return manager?.GetNextIndex(aggregateType) ?? 0;
+    }
+
+    private IAggregateManager GetResponsibleManager()
+    {
+        return aggregateType switch
+        {
+            AggregateType.Controller => GameManager.World as IAggregateManager,
+            AggregateType.Presenter => GameManager.UI as IAggregateManager,
+            AggregateType.Entity => GameManager.World as IAggregateManager,
+            AggregateType.Part => GameManager.World as IAggregateManager,
+            _ => null
+        };
     }
 
     protected virtual void Start()
     {
-        ChangeState(ObjectState.Initialized);
-
-        if (autoRegister && !isRegisteredToManager)
-        {
-            AutoRegisterToManager();
-        }
-
-        ChangeState(ObjectState.Active);
-        OnStartComplete();
+        RegisterToManager();
     }
 
     protected virtual void OnDestroy()
     {
-        ChangeState(ObjectState.Destroyed);
-
-        if (isRegisteredToManager)
+        if (enableInitialization && isInitialized)
         {
-            AutoUnregisterFromManager();
+            PerformDeinitialization();
         }
 
-        OnDestroyComplete();
+        UnregisterFromManager();
     }
 
-    protected virtual void OnEnable()
+    public virtual void PerformInitialization()
     {
-        if (currentState == ObjectState.Inactive)
+        if (isInitialized) return;
+
+        OnBeforeInitialize();
+        OnInitialize();
+        OnAfterInitialize();
+
+        isInitialized = true;
+    }
+
+    public virtual void PerformDeinitialization()
+    {
+        if (!isInitialized) return;
+
+        OnBeforeDeinitialize();
+        OnDeinitialize();
+        OnAfterDeinitialize();
+
+        isInitialized = false;
+    }
+
+    protected virtual void OnBeforeInitialize() { }
+    protected virtual void OnInitialize() { }
+    protected virtual void OnAfterInitialize() { }
+    protected virtual void OnBeforeDeinitialize() { }
+    protected virtual void OnDeinitialize() { }
+    protected virtual void OnAfterDeinitialize() { }
+
+    public void SetInPool(bool inPool)
+    {
+        isInPool = inPool;
+        OnPoolStateChanged(inPool);
+    }
+
+    protected virtual void OnPoolStateChanged(bool inPool)
+    {
+        if (inPool)
         {
-            ChangeState(ObjectState.Active);
+            OnEnterPool();
         }
-        OnEnableComplete();
-    }
-
-    protected virtual void OnDisable()
-    {
-        if (currentState == ObjectState.Active)
+        else
         {
-            ChangeState(ObjectState.Inactive);
-        }
-        OnDisableComplete();
-    }
-
-    protected virtual void OnAwakeComplete() { }
-    protected virtual void OnStartComplete() { }
-    protected virtual void OnEnableComplete() { }
-    protected virtual void OnDisableComplete() { }
-    protected virtual void OnDestroyComplete() { }
-    protected virtual void OnStateChanged(ObjectState oldState, ObjectState newState) { }
-
-    private void InitializeMetadata()
-    {
-        createdTime = DateTime.Now;
-        createdScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-
-        ApplyInitialSettings();
-        SetupAutoMetadata();
-    }
-
-    private void ApplyInitialSettings()
-    {
-        foreach (var group in initialGroups.Where(g => !string.IsNullOrEmpty(g)))
-        {
-            groups.Add(group);
-        }
-
-        foreach (var tag in initialTags)
-        {
-            tags.Add(tag);
+            OnExitPool();
         }
     }
 
-    private void SetupAutoMetadata()
+    protected virtual void OnEnterPool() { }
+    protected virtual void OnExitPool() { }
+
+    private void RegisterToManager()
     {
-        SetMetadata("CreatedTime", createdTime);
-        SetMetadata("CreatedScene", createdScene);
-        SetMetadata("InitialPosition", transform.position);
-        SetMetadata("GameObjectName", gameObject.name);
-        SetMetadata("TypeName", GetType().Name);
-        SetMetadata("InstanceID", GetInstanceID());
+        var manager = GetResponsibleManager();
+        manager?.RegisterAggregate(this);
     }
 
-    private void AutoRegisterToManager()
+    private void UnregisterFromManager()
     {
-        try
-        {
-            bool registered = false;
-
-            if (this is Presenter presenter && GameManager.UI != null)
-            {
-                GameManager.UI.RegisterWithAutoMetadata(presenter);
-                registered = true;
-            }
-            else if (this is Controller controller && GameManager.World != null)
-            {
-                GameManager.World.RegisterWithAutoMetadata(controller);
-                registered = true;
-            }
-
-            isRegisteredToManager = registered;
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"[{AggregateId}] Auto-registration failed: {ex.Message}");
-        }
+        var manager = GetResponsibleManager();
+        manager?.UnregisterAggregate(this);
     }
 
-    private void AutoUnregisterFromManager()
+    public void ForceSetIdentity(AggregateType type, int index, int id)
     {
-        try
-        {
-            if (this is Presenter presenter && GameManager.UI != null)
-            {
-                GameManager.UI.Unregister(presenter);
-            }
-            else if (this is Controller controller && GameManager.World != null)
-            {
-                GameManager.World.Unregister(controller);
-            }
-
-            isRegisteredToManager = false;
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"[{AggregateId}] Auto-unregistration failed: {ex.Message}");
-        }
+        aggregateType = type;
+        aggregateIndex = index;
+        instanceId = id;
     }
 
-    public bool AddToGroup(string groupName)
+    public string GetAggregateId()
     {
-        if (string.IsNullOrEmpty(groupName)) return false;
-
-        bool added = groups.Add(groupName);
-        if (added)
-        {
-            NotifyManagerGroupChange(groupName, true);
-        }
-        return added;
-    }
-
-    public bool RemoveFromGroup(string groupName)
-    {
-        bool removed = groups.Remove(groupName);
-        if (removed)
-        {
-            NotifyManagerGroupChange(groupName, false);
-        }
-        return removed;
-    }
-
-    public bool IsInGroup(string groupName) => groups.Contains(groupName);
-    public bool IsInAnyGroup(params string[] groupNames) => groupNames.Any(groups.Contains);
-    public bool IsInAllGroups(params string[] groupNames) => groupNames.All(groups.Contains);
-
-    public void ClearGroups()
-    {
-        var oldGroups = new HashSet<string>(groups);
-        groups.Clear();
-
-        foreach (var group in oldGroups)
-        {
-            NotifyManagerGroupChange(group, false);
-        }
-    }
-
-    public bool AddTag(ObjectTag tag)
-    {
-        bool added = tags.Add(tag);
-        if (added)
-        {
-            NotifyManagerTagChange(tag, true);
-        }
-        return added;
-    }
-
-    public bool RemoveTag(ObjectTag tag)
-    {
-        bool removed = tags.Remove(tag);
-        if (removed)
-        {
-            NotifyManagerTagChange(tag, false);
-        }
-        return removed;
-    }
-
-    public bool HasTag(ObjectTag tag) => tags.Contains(tag);
-    public bool HasAnyTag(params ObjectTag[] tagsToCheck) => tagsToCheck.Any(tags.Contains);
-    public bool HasAllTags(params ObjectTag[] tagsToCheck) => tagsToCheck.All(tags.Contains);
-
-    public void ClearTags()
-    {
-        var oldTags = new HashSet<ObjectTag>(tags);
-        tags.Clear();
-
-        foreach (var tag in oldTags)
-        {
-            NotifyManagerTagChange(tag, false);
-        }
-    }
-
-    public void SetMetadata<T>(string key, T value)
-    {
-        if (string.IsNullOrEmpty(key)) return;
-        metadata[key] = value;
-    }
-
-    public T GetMetadata<T>(string key, T defaultValue = default(T))
-    {
-        if (metadata.TryGetValue(key, out var value) && value is T typedValue)
-        {
-            return typedValue;
-        }
-        return defaultValue;
-    }
-
-    public bool HasMetadata(string key) => metadata.ContainsKey(key);
-    public bool RemoveMetadata(string key) => metadata.Remove(key);
-    public Dictionary<string, object> GetAllMetadata() => new Dictionary<string, object>(metadata);
-
-    private void ChangeState(ObjectState newState)
-    {
-        if (currentState == newState) return;
-
-        var oldState = currentState;
-        currentState = newState;
-
-        OnStateChanged(oldState, newState);
-        NotifyManagerStateChange(oldState, newState);
-    }
-
-    public void ForceChangeState(ObjectState newState)
-    {
-        ChangeState(newState);
-    }
-
-    internal ContainerItemInfo CreateItemInfo()
-    {
-        return new ContainerItemInfo
-        {
-            InstanceId = GetInstanceID(),
-            RegisterTime = Time.time,
-            Scene = gameObject.scene,
-            OriginalName = name,
-            Type = GetType(),
-            AggregateId = this.AggregateId,
-            CreatedTime = this.CreatedTime,
-            CreatedScene = this.CreatedScene,
-            CustomMetadata = new Dictionary<string, object>(metadata)
-        };
-    }
-
-    internal string[] GetGroupArray() => groups.ToArray();
-    internal string[] GetTagStringArray() => tags.Select(tag => tag.ToString()).ToArray();
-
-    internal void OnManagerSync_GroupAdded(string groupName) => groups.Add(groupName);
-    internal void OnManagerSync_GroupRemoved(string groupName) => groups.Remove(groupName);
-    internal void OnManagerSync_TagAdded(string tagName)
-    {
-        if (Enum.TryParse<ObjectTag>(tagName, out var tag))
-            tags.Add(tag);
-    }
-    internal void OnManagerSync_TagRemoved(string tagName)
-    {
-        if (Enum.TryParse<ObjectTag>(tagName, out var tag))
-            tags.Remove(tag);
-    }
-
-    private void NotifyManagerGroupChange(string groupName, bool added)
-    {
-        if (!isRegisteredToManager) return;
-
-        try
-        {
-            if (this is Presenter && GameManager.UI != null)
-            {
-                if (added) GameManager.UI.AddToGroup(GetInstanceID(), groupName);
-                else GameManager.UI.RemoveFromGroup(GetInstanceID(), groupName);
-            }
-            else if (this is Controller && GameManager.World != null)
-            {
-                if (added) GameManager.World.AddToGroup(GetInstanceID(), groupName);
-                else GameManager.World.RemoveFromGroup(GetInstanceID(), groupName);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"[{AggregateId}] Failed to notify manager of group change: {ex.Message}");
-        }
-    }
-
-    private void NotifyManagerTagChange(ObjectTag tag, bool added)
-    {
-        if (!isRegisteredToManager) return;
-
-        try
-        {
-            string tagString = tag.ToString();
-
-            if (this is Presenter && GameManager.UI != null)
-            {
-                if (added) GameManager.UI.AddTag(GetInstanceID(), tagString);
-                else GameManager.UI.RemoveTag(GetInstanceID(), tagString);
-            }
-            else if (this is Controller && GameManager.World != null)
-            {
-                if (added) GameManager.World.AddTag(GetInstanceID(), tagString);
-                else GameManager.World.RemoveTag(GetInstanceID(), tagString);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"[{AggregateId}] Failed to notify manager of tag change: {ex.Message}");
-        }
-    }
-
-    private void NotifyManagerStateChange(ObjectState oldState, ObjectState newState)
-    {
-        if (!isRegisteredToManager) return;
-
-        try
-        {
-            var itemState = MapToItemState(newState);
-
-            if (this is Presenter && GameManager.UI != null)
-            {
-                GameManager.UI.SetItemState(GetInstanceID(), itemState);
-            }
-            else if (this is Controller && GameManager.World != null)
-            {
-                GameManager.World.SetItemState(GetInstanceID(), itemState);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"[{AggregateId}] Failed to notify manager of state change: {ex.Message}");
-        }
-    }
-
-    private ItemState MapToItemState(ObjectState objectState)
-    {
-        return objectState switch
-        {
-            ObjectState.Created => ItemState.Loading,
-            ObjectState.Initialized => ItemState.Loading,
-            ObjectState.Active => ItemState.Active,
-            ObjectState.Inactive => ItemState.Inactive,
-            ObjectState.Destroyed => ItemState.Destroyed,
-            _ => ItemState.Unknown
-        };
+        return $"{aggregateType}_{aggregateIndex}_{instanceId}";
     }
 
     public override string ToString()
     {
-        return $"{GetType().Name}(ID:{AggregateId}, State:{currentState}, Groups:{groups.Count}, Tags:{tags.Count})";
-    }
-
-    public string GetDetailedInfo()
-    {
-        var groupList = groups.Count > 0 ? string.Join(", ", groups) : "None";
-        var tagList = tags.Count > 0 ? string.Join(", ", tags) : "None";
-
-        return $"AggregateRoot Details:\n" +
-               $"  ID: {AggregateId}\n" +
-               $"  Type: {GetType().Name}\n" +
-               $"  State: {currentState}\n" +
-               $"  Created: {createdTime:yyyy-MM-dd HH:mm:ss}\n" +
-               $"  Scene: {createdScene}\n" +
-               $"  Groups: {groupList}\n" +
-               $"  Tags: {tagList}\n" +
-               $"  Metadata: {metadata.Count} items\n" +
-               $"  Registered: {isRegisteredToManager}";
+        return $"{GetType().Name}({GetAggregateId()})";
     }
 }
 
-// 상태 및 태그 정의
-public enum ObjectState
+public interface IAggregateManager
 {
-    Created,      // 생성됨 (Awake 완료)
-    Initialized,  // 초기화 완료 (Start 시작)
-    Active,       // 활성 상태 (Start 완료 또는 OnEnable)
-    Inactive,     // 비활성 상태 (OnDisable)
-    Destroyed     // 파괴됨 (OnDestroy)
-}
-
-public enum ObjectTag
-{
-    // === 공통 태그 ===
-    Temporary, Important, Pooled, Debug, System,
-
-    // === UI 태그 ===
-    UI, Menu, HUD, Dialog, Button, Panel,
-
-    // === 게임플레이 태그 ===
-    Player, Enemy, Boss, NPC, Item, Weapon, Projectile,
-
-    // === 이동 방식 태그 ===
-    Flying, Ground, Underwater,
-
-    // === 상태 태그 ===
-    Invincible, Hidden, Frozen, Burning,
-
-    // === 레벨/구역 태그 ===
-    Tutorial, MainGame, Cutscene, Loading,
-
-    // === 성능 태그 ===
-    HighPriority, LowPriority, Optimized,
-
-    // === 네트워크 태그 ===
-    Networked, Local, Synced
+    int GetNextIndex(AggregateType type);
+    void RegisterAggregate(AggregateRoot aggregate);
+    void UnregisterAggregate(AggregateRoot aggregate);
 }

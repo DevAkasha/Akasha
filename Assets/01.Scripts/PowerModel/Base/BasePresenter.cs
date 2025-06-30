@@ -5,20 +5,27 @@ using UnityEngine;
 
 public abstract class Presenter : AggregateRoot
 {
-    // AggregateRoot 상속으로 InstanceID 소유
-    // UIManager에 의해 관리됨
+    protected override void OnInitialize()
+    {
+        base.OnInitialize();
+        OnPresenterInitialize();
+    }
+
+    protected override void OnDeinitialize()
+    {
+        OnPresenterDeinitialize();
+        base.OnDeinitialize();
+    }
+
+    protected virtual void OnPresenterInitialize() { }
+    protected virtual void OnPresenterDeinitialize() { }
 }
 
-/// <summary>
-/// 개선된 ViewModel 지원을 위한 BasePresenter 수정
-/// </summary>
 public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
 {
     [Header("Presenter Settings")]
     [SerializeField] protected bool enableDebugLogs = false;
-    [SerializeField] protected bool manualManagerRegistration = false; // 수동 등록 모드
 
-    #region IRxOwner, IRxCaller Implementation
     public bool IsRxVarOwner => true;
     public bool IsRxAllOwner => false;
     public bool IsLogicalCaller => true;
@@ -26,6 +33,7 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
     public bool IsFunctionalCaller => true;
 
     private readonly HashSet<RxBase> trackedRxVars = new();
+    private readonly List<BaseView> ownedViews = new();
 
     public void RegisterRx(RxBase rx)
     {
@@ -40,10 +48,6 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
         }
         trackedRxVars.Clear();
     }
-    #endregion
-
-    #region View Management
-    private readonly List<BaseView> ownedViews = new();
 
     protected T CreateView<T>() where T : BaseView
     {
@@ -152,9 +156,7 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
         }
         LogDebug("All views hidden");
     }
-    #endregion
 
-    #region Model Binding
     protected void BindModelToAllViews(BaseModel model)
     {
         if (model == null)
@@ -196,33 +198,15 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
             LogWarning($"View {view.GetType().Name} does not have BindToModel method");
         }
     }
-    #endregion
 
-    #region Unity Lifecycle - AggregateRoot 통합
-    protected override void Awake()
+    protected override void OnPresenterInitialize()
     {
-        base.Awake(); // AggregateRoot.Awake() 호출
-        AtInit();
+        base.OnPresenterInitialize();
+        LogDebug($"Presenter {GetType().Name} initialized");
     }
 
-    protected override void Start()
+    protected override void OnPresenterDeinitialize()
     {
-        base.Start(); // AggregateRoot.Start() 호출 (자동 등록 포함)
-
-        // 수동 등록 모드인 경우에만 수동 등록
-        if (manualManagerRegistration && GameManager.UI != null)
-        {
-            GameManager.UI.RegisterWithAutoMetadata(this);
-            LogDebug("Manual registration to UIManager completed");
-        }
-    }
-
-    protected override void OnDestroy()
-    {
-        base.OnDestroy(); // AggregateRoot.OnDestroy() 호출 (자동 해제 포함)
-
-        AtDestroy();
-
         foreach (var view in ownedViews)
         {
             if (view != null)
@@ -231,10 +215,10 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
         ownedViews.Clear();
 
         Unload();
+        LogDebug($"Presenter {GetType().Name} deinitialized");
+        base.OnPresenterDeinitialize();
     }
-    #endregion
 
-    #region Presenter Control
     public virtual void Show()
     {
         ShowAllViews();
@@ -256,79 +240,25 @@ public abstract class BasePresenter : Presenter, IRxOwner, IRxCaller
     {
         LogDebug($"Presenter {GetType().Name} hidden");
     }
-    #endregion
 
-    #region AggregateRoot Integration
-    protected void SetupPresenterTags()
-    {
-        AddTag(ObjectTag.UI);
-
-        // 메뉴 타입 자동 감지
-        if (GetType().Name.ToLower().Contains("menu"))
-        {
-            AddTag(ObjectTag.Menu);
-        }
-
-        // HUD 타입 자동 감지
-        if (GetType().Name.ToLower().Contains("hud"))
-        {
-            AddTag(ObjectTag.HUD);
-        }
-
-        // 다이얼로그 타입 자동 감지
-        if (GetType().Name.ToLower().Contains("dialog") || GetType().Name.ToLower().Contains("popup"))
-        {
-            AddTag(ObjectTag.Dialog);
-        }
-    }
-
-    protected void UpdateViewMetadata()
-    {
-        SetMetadata("ViewCount", ownedViews.Count);
-        SetMetadata("LastViewUpdate", DateTime.Now);
-
-        if (ownedViews.Count > 0)
-        {
-            SetMetadata("ViewTypes", ownedViews.Select(v => v.GetType().Name).ToArray());
-        }
-    }
-    #endregion
-
-    #region Lifecycle Hooks
-    protected virtual void AtInit()
-    {
-        SetupPresenterTags();
-        LogDebug($"Presenter {GetType().Name} initialized");
-    }
-
-    protected virtual void AtDestroy()
-    {
-        LogDebug($"Presenter {GetType().Name} destroyed");
-    }
-    #endregion
-
-    #region Utility Methods
     protected void LogDebug(string message)
     {
         if (enableDebugLogs)
         {
-            Debug.Log($"[{AggregateId}] {message}");
+            Debug.Log($"[{GetAggregateId()}] {message}");
         }
     }
 
     protected void LogWarning(string message)
     {
-        Debug.LogWarning($"[{AggregateId}] {message}");
+        Debug.LogWarning($"[{GetAggregateId()}] {message}");
     }
 
     protected void LogError(string message)
     {
-        Debug.LogError($"[{AggregateId}] {message}");
+        Debug.LogError($"[{GetAggregateId()}] {message}");
     }
-    #endregion
 
-    #region Properties
     public int ViewCount => ownedViews.Count;
     public bool HasViews => ownedViews.Count > 0;
-    #endregion
 }

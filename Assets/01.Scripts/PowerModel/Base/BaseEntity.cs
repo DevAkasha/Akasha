@@ -1,21 +1,30 @@
-using System;
-using System.Collections;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
-public abstract class BaseEntity : WorldObject, IModelOwner, IRxCaller
+public abstract class BaseEntity : AggregateRoot, IModelOwner, IRxCaller
 {
-
-
     public bool IsLogicalCaller => true;
-
     public bool IsMultiRolesCaller => true;
-
     public bool IsFunctionalCaller => true;
 
     public abstract BaseModel GetBaseModel();
+
+    protected override void OnInitialize()
+    {
+        base.OnInitialize();
+        OnEntityInitialize();
+    }
+
+    protected override void OnDeinitialize()
+    {
+        OnEntityDeinitialize();
+        base.OnDeinitialize();
+    }
+
+    protected virtual void OnEntityInitialize() { }
+    protected virtual void OnEntityDeinitialize() { }
 }
 
 public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseModel
@@ -23,10 +32,19 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
     private readonly Dictionary<Type, BasePart> partsByType = new();
     private readonly List<BasePart> allParts = new();
 
+    public M Model { get; set; }
+
+    public override BaseModel GetBaseModel() => Model;
+    public M GetModel() => Model;
+
     public void CallInit()
     {
         SetupModel();
-        AtInit();
+
+        if (EnableInitialization)
+        {
+            PerformInitialization();
+        }
 
         var parts = GetComponentsInChildren<BasePart>();
         foreach (BasePart part in parts)
@@ -43,15 +61,8 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
         {
             part.CallInitAfter();
         }
-
     }
-    public M Model { get; set; }
 
-    public override BaseModel GetBaseModel() => Model;
-
-    public M GetModel() => Model;
-
-    
     public T GetPart<T>() where T : BasePart
     {
         partsByType.TryGetValue(typeof(T), out var part);
@@ -78,7 +89,7 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
         {
             part.CallDisable();
         }
-        AtDisable();
+        OnEntityDisable();
     }
 
     public void CallDestroy()
@@ -87,7 +98,7 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
         {
             part.CallDestroy();
         }
-        AtDestroy();
+        OnEntityDestroy();
     }
 
     public void CallDeinit()
@@ -96,12 +107,26 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
         {
             part.CallDeinit();
         }
-        AtDeinit();
+
+        if (EnableInitialization && IsInitialized)
+        {
+            PerformDeinitialization();
+        }
     }
 
+    protected override void OnEntityInitialize()
+    {
+        base.OnEntityInitialize();
+    }
+
+    protected override void OnEntityDeinitialize()
+    {
+        Model?.Unload();
+        base.OnEntityDeinitialize();
+    }
+
+    protected virtual void OnEntityDisable() { }
+    protected virtual void OnEntityDestroy() { }
+
     protected abstract void SetupModel();
-    protected virtual void AtInit() { }
-    public virtual void AtDisable() { }
-    public virtual void AtDestroy() { }
-    public virtual void AtDeinit() { }
 }

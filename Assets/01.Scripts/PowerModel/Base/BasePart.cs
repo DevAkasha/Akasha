@@ -1,20 +1,46 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-public abstract class BasePart : WorldObject 
+public abstract class BasePart : AggregateRoot
 {
-    public void CallInit() => AtInit();
-    public void CallInitAfter() => AtInitAfter();
-    public void CallDisable() => AtDisable(); 
-    public void CallDestroy() => AtDestroy();
-    public void CallDeinit() => AtDeinit();
+    protected override void OnInitialize()
+    {
+        base.OnInitialize();
+        OnPartInitialize();
+    }
 
-    protected virtual void AtInit() { }
-    protected virtual void AtInitAfter() { }
-    protected virtual void AtDisable() { }
-    protected virtual void AtDestroy() { }
-    protected virtual void AtDeinit() { }
+    protected override void OnDeinitialize()
+    {
+        OnPartDeinitialize();
+        base.OnDeinitialize();
+    }
+
+    protected virtual void OnPartInitialize() { }
+    protected virtual void OnPartDeinitialize() { }
+
+    public void CallInit()
+    {
+        if (EnableInitialization)
+        {
+            PerformInitialization();
+        }
+    }
+
+    public void CallInitAfter() => OnInitAfter();
+    public void CallDisable() => OnDisable();
+    public void CallDestroy() => OnDestroy();
+
+    public void CallDeinit()
+    {
+        if (EnableInitialization && IsInitialized)
+        {
+            PerformDeinitialization();
+        }
+    }
+
+    protected virtual void OnInitAfter() { }
+    protected virtual void OnDisable() { }
+    protected virtual void OnDestroy() { }
+
     public abstract void RegistEntity(object entity);
     public abstract void RegistModel(object model);
 }
@@ -25,11 +51,11 @@ public abstract class BasePart<E, M> : BasePart where E : BaseEntity<M> where M 
     protected M Model { get; set; }
 
     public override void RegistEntity(object entity) => RegisterEntity(entity as E);
-    public override void RegistModel(object entity) => RegisterModel(entity as M);
+    public override void RegistModel(object model) => RegisterModel(model as M);
 
     protected T GetSiblingPart<T>() where T : BasePart
     {
-        return Entity.GetPart<T>();
+        return Entity?.GetPart<T>();
     }
 
     protected void CallPartMethod<T>(string methodName, params object[] parameters)
@@ -40,7 +66,6 @@ public abstract class BasePart<E, M> : BasePart where E : BaseEntity<M> where M 
         {
             var method = part.GetType().GetMethod(methodName);
             method?.Invoke(part, parameters);
-            // TODO.동작확인 후  파라미터 불일치에 대해 방어코드작성.
         }
     }
 
@@ -49,8 +74,18 @@ public abstract class BasePart<E, M> : BasePart where E : BaseEntity<M> where M 
         Entity = entity;
     }
 
-    public void RegisterModel(M model)
+    private void RegisterModel(M model)
     {
         Model = model;
+    }
+
+    protected override void OnPartInitialize()
+    {
+        base.OnPartInitialize();
+    }
+
+    protected override void OnPartDeinitialize()
+    {
+        base.OnPartDeinitialize();
     }
 }

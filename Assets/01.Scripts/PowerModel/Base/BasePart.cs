@@ -17,29 +17,56 @@ public abstract class BasePart : AggregateRoot
     protected virtual void OnPartInitialize() { }
     protected virtual void OnPartDeinitialize() { }
 
-    public void CallInit()
+    private bool isLifecycleInitialized = false;
+
+    public void CallAwake()
     {
-        if (EnableInitialization)
-        {
-            PerformInitialization();
-        }
+        AtAwake();
     }
 
-    public void CallInitAfter() => OnInitAfter();
-    public void CallDisable() => OnDisable();
-    public void CallDestroy() => OnDestroy();
+    public void CallStart()
+    {
+        AtStart();
+    }
+
+    public void CallEnable()
+    {
+        AtEnable();
+    }
+
+    public void CallDisable()
+    {
+        AtDisable();
+    }
+
+    public void CallDestroy()
+    {
+        AtDestroy();
+    }
+
+    public void CallInit()
+    {
+        if (isLifecycleInitialized) return;
+
+        AtInit();
+        isLifecycleInitialized = true;
+    }
 
     public void CallDeinit()
     {
-        if (EnableInitialization && IsInitialized)
-        {
-            PerformDeinitialization();
-        }
+        if (!isLifecycleInitialized) return;
+
+        AtDeinit();
+        isLifecycleInitialized = false;
     }
 
-    protected virtual void OnInitAfter() { }
-    protected virtual void OnDisable() { }
-    protected virtual void OnDestroy() { }
+    protected virtual void AtAwake() { }
+    protected virtual void AtStart() { }
+    protected virtual void AtInit() { }
+    protected virtual void AtEnable() { }
+    protected virtual void AtDisable() { }
+    protected virtual void AtDeinit() { }
+    protected virtual void AtDestroy() { }
 
     public abstract void RegistEntity(object entity);
     public abstract void RegistModel(object model);
@@ -59,7 +86,7 @@ public abstract class BasePart<E, M> : BasePart where E : BaseEntity<M> where M 
     }
 
     protected void CallPartMethod<T>(string methodName, params object[] parameters)
-    where T : BasePart
+        where T : BasePart
     {
         var part = GetSiblingPart<T>();
         if (part != null)

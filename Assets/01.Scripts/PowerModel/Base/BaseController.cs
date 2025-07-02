@@ -36,6 +36,7 @@ public abstract class BaseController : Controller, IRxCaller, IRxOwner
     public bool IsRxAllOwner => false;
 
     private readonly HashSet<RxBase> trackedRxVars = new();
+    private bool isLifecycleInitialized = false;
 
     public void RegisterRx(RxBase rx)
     {
@@ -51,18 +52,103 @@ public abstract class BaseController : Controller, IRxCaller, IRxOwner
         trackedRxVars.Clear();
     }
 
-    protected override void OnControllerInitialize()
+    protected override void Awake()
     {
-        base.OnControllerInitialize();
+        base.Awake();
+        CallAwake();
+    }
+
+    protected override void Start()
+    {
+        base.Start();
+        CallStart();
+    }
+
+    protected virtual void OnEnable()
+    {
+        CallEnable();
+    }
+
+    protected virtual void OnDisable()
+    {
+        CallDisable();
+    }
+
+    protected override void OnDestroy()
+    {
+        CallDestroy();
+        base.OnDestroy();
+    }
+
+    private void CallAwake()
+    {
+        AtAwake();
+        LogDebug($"Controller {GetType().Name} awakened");
+    }
+
+    private void CallStart()
+    {
+        AtStart();
+        CallInit();
+        LogDebug($"Controller {GetType().Name} started");
+    }
+
+    private void CallEnable()
+    {
+        AtEnable();
+        if (!isLifecycleInitialized)
+        {
+            CallInit();
+        }
+        LogDebug($"Controller {GetType().Name} enabled");
+    }
+
+    private void CallDisable()
+    {
+        AtDisable();
+        if (EnablePooling && isLifecycleInitialized)
+        {
+            CallDeinit();
+        }
+        LogDebug($"Controller {GetType().Name} disabled");
+    }
+
+    private void CallDestroy()
+    {
+        if (isLifecycleInitialized)
+        {
+            CallDeinit();
+        }
+        AtDestroy();
+        Unload();
+        LogDebug($"Controller {GetType().Name} destroyed");
+    }
+
+    private void CallInit()
+    {
+        if (isLifecycleInitialized) return;
+
+        AtInit();
+        isLifecycleInitialized = true;
         LogDebug($"Controller {GetType().Name} initialized");
     }
 
-    protected override void OnControllerDeinitialize()
+    private void CallDeinit()
     {
-        Unload();
+        if (!isLifecycleInitialized) return;
+
+        AtDeinit();
+        isLifecycleInitialized = false;
         LogDebug($"Controller {GetType().Name} deinitialized");
-        base.OnControllerDeinitialize();
     }
+
+    protected virtual void AtAwake() { }
+    protected virtual void AtStart() { }
+    protected virtual void AtInit() { }
+    protected virtual void AtEnable() { }
+    protected virtual void AtDisable() { }
+    protected virtual void AtDeinit() { }
+    protected virtual void AtDestroy() { }
 
     protected void LogDebug(string message)
     {
@@ -95,22 +181,111 @@ public abstract class BaseController<M> : MController, IRxCaller, IModelOwner<M>
     public bool IsMultiRolesCaller => true;
     public bool IsFunctionalCaller => false;
 
+    private bool isLifecycleInitialized = false;
+
     public override BaseModel GetBaseModel() => Model;
     public M GetModel() => Model;
 
-    protected override void OnControllerInitialize()
+    protected override void Awake()
     {
-        SetupModel();
-        base.OnControllerInitialize();
-        LogDebug($"Model Controller {GetType().Name} initialized with model {typeof(M).Name}");
+        base.Awake();
+        CallAwake();
     }
 
-    protected override void OnControllerDeinitialize()
+    protected override void Start()
     {
-        Model?.Unload();
-        LogDebug($"Model Controller {GetType().Name} deinitialized");
-        base.OnControllerDeinitialize();
+        base.Start();
+        CallStart();
     }
+
+    protected virtual void OnEnable()
+    {
+        CallEnable();
+    }
+
+    protected virtual void OnDisable()
+    {
+        CallDisable();
+    }
+
+    protected override void OnDestroy()
+    {
+        CallDestroy();
+        base.OnDestroy();
+    }
+
+    private void CallAwake()
+    {
+        SetupModel();
+        AtSetModel();
+        AtAwake();
+        LogDebug($"Model Controller {GetType().Name} awakened with model {typeof(M).Name}");
+    }
+
+    private void CallStart()
+    {
+        AtStart();
+        CallInit();
+        LogDebug($"Model Controller {GetType().Name} started");
+    }
+
+    private void CallEnable()
+    {
+        AtEnable();
+        if (!isLifecycleInitialized)
+        {
+            CallInit();
+        }
+        LogDebug($"Model Controller {GetType().Name} enabled");
+    }
+
+    private void CallDisable()
+    {
+        AtDisable();
+        if (EnablePooling && isLifecycleInitialized)
+        {
+            CallDeinit();
+        }
+        LogDebug($"Model Controller {GetType().Name} disabled");
+    }
+
+    private void CallDestroy()
+    {
+        if (isLifecycleInitialized)
+        {
+            CallDeinit();
+        }
+        AtDestroy();
+        Model?.Unload();
+        LogDebug($"Model Controller {GetType().Name} destroyed");
+    }
+
+    private void CallInit()
+    {
+        if (isLifecycleInitialized) return;
+
+        AtInit();
+        isLifecycleInitialized = true;
+        LogDebug($"Model Controller {GetType().Name} initialized");
+    }
+
+    private void CallDeinit()
+    {
+        if (!isLifecycleInitialized) return;
+
+        AtDeinit();
+        isLifecycleInitialized = false;
+        LogDebug($"Model Controller {GetType().Name} deinitialized");
+    }
+
+    protected virtual void AtSetModel() { }
+    protected virtual void AtAwake() { }
+    protected virtual void AtStart() { }
+    protected virtual void AtInit() { }
+    protected virtual void AtEnable() { }
+    protected virtual void AtDisable() { }
+    protected virtual void AtDeinit() { }
+    protected virtual void AtDestroy() { }
 
     protected abstract void SetupModel();
 
@@ -147,6 +322,8 @@ public abstract class BaseController<E, M> : MController, IRxCaller
     bool IRxCaller.IsMultiRolesCaller => false;
     bool IRxCaller.IsFunctionalCaller => false;
 
+    private bool isLifecycleInitialized = false;
+
     public override BaseModel GetBaseModel() => Model;
     public M GetModel() => Model;
 
@@ -156,33 +333,107 @@ public abstract class BaseController<E, M> : MController, IRxCaller
             entity = GetComponentInChildren<E>();
 
         base.Awake();
+        CallAwake();
     }
 
-    protected override void OnControllerInitialize()
+    protected override void Start()
     {
-        entity?.CallInit();
-        base.OnControllerInitialize();
-        LogDebug($"Entity Controller {GetType().Name} initialized with entity {typeof(E).Name}");
+        base.Start();
+        CallStart();
     }
 
-    protected override void OnControllerDeinitialize()
+    protected virtual void OnEnable()
     {
-        entity?.CallDeinit();
-        Model?.Unload();
-        LogDebug($"Entity Controller {GetType().Name} deinitialized");
-        base.OnControllerDeinitialize();
+        CallEnable();
     }
 
-    protected void OnDisable()
+    protected virtual void OnDisable()
     {
-        entity?.CallDisable();
+        CallDisable();
     }
 
     protected override void OnDestroy()
     {
-        entity?.CallDestroy();
+        CallDestroy();
         base.OnDestroy();
     }
+
+    private void CallAwake()
+    {
+        entity?.CallAwake();
+        AtAwake();
+        LogDebug($"Entity Controller {GetType().Name} awakened with entity {typeof(E).Name}");
+    }
+
+    private void CallStart()
+    {
+        entity?.CallStart();
+        AtStart();
+        CallInit();
+        LogDebug($"Entity Controller {GetType().Name} started");
+    }
+
+    private void CallEnable()
+    {
+        entity?.CallEnable();
+        AtEnable();
+        if (!isLifecycleInitialized)
+        {
+            CallInit();
+        }
+        LogDebug($"Entity Controller {GetType().Name} enabled");
+    }
+
+    private void CallDisable()
+    {
+        entity?.CallDisable();
+        AtDisable();
+        if (EnablePooling && isLifecycleInitialized)
+        {
+            CallDeinit();
+        }
+        LogDebug($"Entity Controller {GetType().Name} disabled");
+    }
+
+    private void CallDestroy()
+    {
+        entity?.CallDestroy();
+        if (isLifecycleInitialized)
+        {
+            CallDeinit();
+        }
+        AtDestroy();
+        LogDebug($"Entity Controller {GetType().Name} destroyed");
+    }
+
+    private void CallInit()
+    {
+        if (isLifecycleInitialized) return;
+
+        entity?.CallInit();
+        AtInit();
+        isLifecycleInitialized = true;
+        LogDebug($"Entity Controller {GetType().Name} initialized");
+    }
+
+    private void CallDeinit()
+    {
+        if (!isLifecycleInitialized) return;
+
+        entity?.CallDeinit();
+        AtDeinit();
+        isLifecycleInitialized = false;
+        LogDebug($"Entity Controller {GetType().Name} deinitialized");
+    }
+
+    protected virtual void AtSetModel() { }
+    protected virtual void AtAwake() { }
+    protected virtual void AtStart() { }
+    protected virtual void AtInit() { }
+    protected virtual void AtEnable() { }
+    protected virtual void AtDisable() { }
+    protected virtual void AtDeinit() { }
+    protected virtual void AtDestroy() { }
 
     protected void LogDebug(string message)
     {

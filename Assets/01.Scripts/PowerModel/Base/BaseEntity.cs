@@ -31,21 +31,96 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
 {
     private readonly Dictionary<Type, BasePart> partsByType = new();
     private readonly List<BasePart> allParts = new();
+    private bool isLifecycleInitialized = false;
 
     public M Model { get; set; }
 
     public override BaseModel GetBaseModel() => Model;
     public M GetModel() => Model;
 
-    public void CallInit()
+    public void CallAwake()
     {
+        AtSetModel();
         SetupModel();
 
-        if (EnableInitialization)
+        InitializeParts();
+
+        foreach (var part in allParts)
         {
-            PerformInitialization();
+            part.CallAwake();
         }
 
+        AtAwake();
+    }
+
+    public void CallStart()
+    {
+        foreach (var part in allParts)
+        {
+            part.CallStart();
+        }
+
+        AtStart();
+    }
+
+    public void CallEnable()
+    {
+        foreach (var part in allParts)
+        {
+            part.CallEnable();
+        }
+
+        AtEnable();
+    }
+
+    public void CallDisable()
+    {
+        foreach (var part in allParts)
+        {
+            part.CallDisable();
+        }
+
+        AtDisable();
+    }
+
+    public void CallDestroy()
+    {
+        foreach (var part in allParts)
+        {
+            part.CallDestroy();
+        }
+        AtDestroy();
+        Model.Unload();
+    }
+
+    public void CallInit()
+    {
+        if (isLifecycleInitialized) return;
+
+        foreach (var part in allParts)
+        {
+            part.CallInit();
+        }
+
+        AtInit();
+        isLifecycleInitialized = true;
+    }
+
+    public void CallDeinit()
+    {
+        if (!isLifecycleInitialized) return;
+
+        foreach (var part in allParts)
+        {
+            part.CallDeinit();
+        }
+        AtDeinit();
+        Model.Unload();
+        isLifecycleInitialized = false;
+    }
+
+    private void InitializeParts()
+    {
         var parts = GetComponentsInChildren<BasePart>();
         foreach (BasePart part in parts)
         {
@@ -54,12 +129,6 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
 
             part.RegistEntity(this);
             part.RegistModel(Model);
-            part.CallInit();
-        }
-
-        foreach (var part in allParts)
-        {
-            part.CallInitAfter();
         }
     }
 
@@ -83,36 +152,14 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
         }
     }
 
-    public void CallDisable()
-    {
-        foreach (var part in allParts)
-        {
-            part.CallDisable();
-        }
-        OnEntityDisable();
-    }
-
-    public void CallDestroy()
-    {
-        foreach (var part in allParts)
-        {
-            part.CallDestroy();
-        }
-        OnEntityDestroy();
-    }
-
-    public void CallDeinit()
-    {
-        foreach (var part in allParts)
-        {
-            part.CallDeinit();
-        }
-
-        if (EnableInitialization && IsInitialized)
-        {
-            PerformDeinitialization();
-        }
-    }
+    protected virtual void AtSetModel() { }
+    protected virtual void AtAwake() { }
+    protected virtual void AtStart() { }
+    protected virtual void AtInit() { }
+    protected virtual void AtEnable() { }
+    protected virtual void AtDisable() { }
+    protected virtual void AtDeinit() { }
+    protected virtual void AtDestroy() { }
 
     protected override void OnEntityInitialize()
     {
@@ -124,9 +171,6 @@ public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseM
         Model?.Unload();
         base.OnEntityDeinitialize();
     }
-
-    protected virtual void OnEntityDisable() { }
-    protected virtual void OnEntityDestroy() { }
 
     protected abstract void SetupModel();
 }

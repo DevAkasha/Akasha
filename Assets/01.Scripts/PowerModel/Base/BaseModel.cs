@@ -3,6 +3,11 @@ using Akasha.Modifier;
 
 namespace Akasha
 {
+    public interface IModifiableTarget
+    {
+        IEnumerable<IModifiable> GetModifiables(); // 수정 가능한 필드 목록 반환
+    }
+
     public abstract class BaseModel : IModifiableTarget, IRxCaller, IRxOwner
     {
         bool IRxCaller.IsLogicalCaller => true;

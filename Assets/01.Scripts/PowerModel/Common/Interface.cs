@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Akasha.Modifier;
+
 
 namespace Akasha
 {
@@ -15,10 +15,6 @@ namespace Akasha
         FinalAdd
     }
 
-    public interface IModifiableTarget
-    {
-        IEnumerable<IModifiable> GetModifiables(); // 수정 가능한 필드 목록 반환
-    }
 
     public interface IRxReadable<T>
     {

@@ -2,237 +2,240 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class ModifierEffect : BaseEffect
+namespace Akasha.Modifier
 {
-    public EffectApplyMode Mode { get; private set; }
-    public float Duration { get; private set; }
-    public IReadOnlyList<FieldModifier> Modifiers => modifiers;
-    public bool HasSignFlip => hasSignFlip;
-    public bool Stackable { get; private set; } = false;
-    public bool RefreshOnDuplicate { get; private set; } = false;
-    public Func<bool> RemoveTrigger { get; private set; } = null;
-    public StackBehavior StackBehavior { get; private set; } = StackBehavior.ReplaceLatest;
-
-    private readonly List<FieldModifier> modifiers = new();
-    private bool hasSignFlip = false;
-
-    public Func<float, float> Interpolator { get; private set; }
-    public bool IsInterpolated { get; private set; } = false;
-
-    public ModifierEffect(Enum id, EffectApplyMode mode = EffectApplyMode.Manual, float duration = 0f)
-        : base(id)
+    public class ModifierEffect : BaseEffect
     {
-        Mode = mode;
-        Duration = duration;
-    }
+        public EffectApplyMode Mode { get; private set; }
+        public float Duration { get; private set; }
+        public IReadOnlyList<FieldModifier> Modifiers => modifiers;
+        public bool HasSignFlip => hasSignFlip;
+        public bool Stackable { get; private set; } = false;
+        public bool RefreshOnDuplicate { get; private set; } = false;
+        public Func<bool> RemoveTrigger { get; private set; } = null;
+        public StackBehavior StackBehavior { get; private set; } = StackBehavior.ReplaceLatest;
 
-    public ModifierEffect Add<T>(string fieldName, ModifierType type, float value)
-    {
-        modifiers.Add(new FieldModifier(fieldName, type, value));
-        return this;
-    }
+        private readonly List<FieldModifier> modifiers = new();
+        private bool hasSignFlip = false;
 
-    public ModifierEffect AddSignFlip()
-    {
-        hasSignFlip = true;
-        return this;
-    }
+        public Func<float, float> Interpolator { get; private set; }
+        public bool IsInterpolated { get; private set; } = false;
 
-    public new ModifierEffect When(Func<bool> condition)
-    {
-        base.When(condition);
-        return this;
-    }
-
-    public ModifierEffect Until(Func<bool> trigger)
-    {
-        RemoveTrigger = trigger;
-        return this;
-    }
-
-    public ModifierEffect SetDuration(float seconds)
-    {
-        if (Mode != EffectApplyMode.Timed)
-            throw new InvalidOperationException("SetDuration is only valid for Timed effects.");
-        Duration = seconds;
-        return this;
-    }
-
-    public ModifierEffect AllowStacking(bool value = true)
-    {
-        Stackable = value;
-        if (value)
+        public ModifierEffect(Enum id, EffectApplyMode mode = EffectApplyMode.Manual, float duration = 0f)
+            : base(id)
         {
-            StackBehavior = StackBehavior.Stack;
-        }
-        return this;
-    }
-
-    public ModifierEffect SetStackBehavior(StackBehavior behavior)
-    {
-        StackBehavior = behavior;
-        if (behavior == StackBehavior.Stack)
-        {
-            Stackable = true;
-        }
-        return this;
-    }
-
-    public ModifierEffect RefreshOnRepeat(bool value = true)
-    {
-        RefreshOnDuplicate = value;
-        return this;
-    }
-
-    public ModifierEffect SetInterpolated(float duration, Func<float, float> interpolator)
-    {
-        this.Duration = duration;
-        this.Interpolator = interpolator;
-        this.IsInterpolated = true;
-        return this;
-    }
-
-    public override void ApplyTo(IModelOwner target)
-    {
-        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
-        if (modifiableTarget == null)
-        {
-            Debug.LogError($"[ModifierEffect] Target {target} does not implement IModifiableTarget");
-            return;
+            Mode = mode;
+            Duration = duration;
         }
 
-        foreach (var modifiable in modifiableTarget.GetModifiables())
+        public ModifierEffect Add<T>(string fieldName, ModifierType type, float value)
         {
-            if (modifiable == null)
-                continue;
+            modifiers.Add(new FieldModifier(fieldName, type, value));
+            return this;
+        }
 
-            foreach (var modifier in Modifiers)
+        public ModifierEffect AddSignFlip()
+        {
+            hasSignFlip = true;
+            return this;
+        }
+
+        public new ModifierEffect When(Func<bool> condition)
+        {
+            base.When(condition);
+            return this;
+        }
+
+        public ModifierEffect Until(Func<bool> trigger)
+        {
+            RemoveTrigger = trigger;
+            return this;
+        }
+
+        public ModifierEffect SetDuration(float seconds)
+        {
+            if (Mode != EffectApplyMode.Timed)
+                throw new InvalidOperationException("SetDuration is only valid for Timed effects.");
+            Duration = seconds;
+            return this;
+        }
+
+        public ModifierEffect AllowStacking(bool value = true)
+        {
+            Stackable = value;
+            if (value)
             {
-                if (modifiable is IRxField field &&
-                    field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                StackBehavior = StackBehavior.Stack;
+            }
+            return this;
+        }
+
+        public ModifierEffect SetStackBehavior(StackBehavior behavior)
+        {
+            StackBehavior = behavior;
+            if (behavior == StackBehavior.Stack)
+            {
+                Stackable = true;
+            }
+            return this;
+        }
+
+        public ModifierEffect RefreshOnRepeat(bool value = true)
+        {
+            RefreshOnDuplicate = value;
+            return this;
+        }
+
+        public ModifierEffect SetInterpolated(float duration, Func<float, float> interpolator)
+        {
+            this.Duration = duration;
+            this.Interpolator = interpolator;
+            this.IsInterpolated = true;
+            return this;
+        }
+
+        public override void ApplyTo(IModelOwner target)
+        {
+            var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+            if (modifiableTarget == null)
+            {
+                Debug.LogError($"[ModifierEffect] Target {target} does not implement IModifiableTarget");
+                return;
+            }
+
+            foreach (var modifiable in modifiableTarget.GetModifiables())
+            {
+                if (modifiable == null)
+                    continue;
+
+                foreach (var modifier in Modifiers)
                 {
-                    modifiable.SetModifier(Key, modifier.Type, modifier.Value, StackBehavior);
+                    if (modifiable is IRxField field &&
+                        field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        modifiable.SetModifier(Key, modifier.Type, modifier.Value, StackBehavior);
+                    }
+                }
+            }
+
+            if (Mode == EffectApplyMode.Timed)
+            {
+                if (IsInterpolated)
+                {
+                    GameManager.EffectRunner.RegisterInterpolatedEffect(this, target);
+                }
+                else
+                {
+                    GameManager.EffectRunner.RegisterTimedEffect(this, target);
                 }
             }
         }
 
-        if (Mode == EffectApplyMode.Timed)
+        public override void RemoveFrom(IModelOwner target)
         {
-            if (IsInterpolated)
+            var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+            if (modifiableTarget == null)
+                return;
+
+            foreach (var modifiable in modifiableTarget.GetModifiables())
             {
-                GameManager.EffectRunner.RegisterInterpolatedEffect(this, target);
-            }
-            else
-            {
-                GameManager.EffectRunner.RegisterTimedEffect(this, target);
-            }
-        }
-    }
+                if (modifiable == null)
+                    continue;
 
-    public override void RemoveFrom(IModelOwner target)
-    {
-        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
-        if (modifiableTarget == null)
-            return;
-
-        foreach (var modifiable in modifiableTarget.GetModifiables())
-        {
-            if (modifiable == null)
-                continue;
-
-            try
-            {
-                modifiable.RemoveModifier(Key, 0);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[ModifierEffect] Failed to remove modifier: {e.Message}");
-            }
-        }
-    }
-
-    public void ApplyStack(IModelOwner target, int stackId)
-    {
-        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
-        if (modifiableTarget == null)
-        {
-            Debug.LogError($"[ModifierEffect] Target {target} does not implement IModifiableTarget");
-            return;
-        }
-
-        foreach (var modifiable in modifiableTarget.GetModifiables())
-        {
-            if (modifiable == null)
-                continue;
-
-            foreach (var modifier in Modifiers)
-            {
-                if (modifiable is IRxField field &&
-                    field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    modifiable.SetModifier(Key, modifier.Type, modifier.Value, StackBehavior.Stack);
+                    modifiable.RemoveModifier(Key, 0);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[ModifierEffect] Failed to remove modifier: {e.Message}");
                 }
             }
         }
-    }
 
-    public void RemoveStack(IModelOwner target, int stackId)
-    {
-        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
-        if (modifiableTarget == null)
-            return;
-
-        foreach (var modifiable in modifiableTarget.GetModifiables())
+        public void ApplyStack(IModelOwner target, int stackId)
         {
-            if (modifiable == null)
-                continue;
-
-            try
+            var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+            if (modifiableTarget == null)
             {
-                modifiable.RemoveModifier(Key, stackId);
+                Debug.LogError($"[ModifierEffect] Target {target} does not implement IModifiableTarget");
+                return;
             }
-            catch (Exception e)
+
+            foreach (var modifiable in modifiableTarget.GetModifiables())
             {
-                Debug.LogError($"[ModifierEffect] Failed to remove stack modifier: {e.Message}");
+                if (modifiable == null)
+                    continue;
+
+                foreach (var modifier in Modifiers)
+                {
+                    if (modifiable is IRxField field &&
+                        field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        modifiable.SetModifier(Key, modifier.Type, modifier.Value, StackBehavior.Stack);
+                    }
+                }
             }
         }
-    }
 
-    public int GetStackCount(IModelOwner target)
-    {
-        var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
-        if (modifiableTarget == null)
+        public void RemoveStack(IModelOwner target, int stackId)
+        {
+            var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+            if (modifiableTarget == null)
+                return;
+
+            foreach (var modifiable in modifiableTarget.GetModifiables())
+            {
+                if (modifiable == null)
+                    continue;
+
+                try
+                {
+                    modifiable.RemoveModifier(Key, stackId);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[ModifierEffect] Failed to remove stack modifier: {e.Message}");
+                }
+            }
+        }
+
+        public int GetStackCount(IModelOwner target)
+        {
+            var modifiableTarget = target.GetBaseModel() as IModifiableTarget;
+            if (modifiableTarget == null)
+                return 0;
+
+            foreach (var modifiable in modifiableTarget.GetModifiables())
+            {
+                if (modifiable == null)
+                    continue;
+
+                foreach (var modifier in Modifiers)
+                {
+                    if (modifiable is IRxField field &&
+                        field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return modifiable.GetStackCount(Key);
+                    }
+                }
+            }
+
             return 0;
-
-        foreach (var modifiable in modifiableTarget.GetModifiables())
-        {
-            if (modifiable == null)
-                continue;
-
-            foreach (var modifier in Modifiers)
-            {
-                if (modifiable is IRxField field &&
-                    field.FieldName.Equals(modifier.FieldName, StringComparison.OrdinalIgnoreCase))
-                {
-                    return modifiable.GetStackCount(Key);
-                }
-            }
         }
-
-        return 0;
     }
-}
 
-public readonly struct FieldModifier
-{
-    public readonly string FieldName;
-    public readonly ModifierType Type;
-    public readonly float Value;
-
-    public FieldModifier(string fieldName, ModifierType type, float value)
+    public readonly struct FieldModifier
     {
-        FieldName = fieldName;
-        Type = type;
-        Value = value;
+        public readonly string FieldName;
+        public readonly ModifierType Type;
+        public readonly float Value;
+
+        public FieldModifier(string fieldName, ModifierType type, float value)
+        {
+            FieldName = fieldName;
+            Type = type;
+            Value = value;
+        }
     }
 }

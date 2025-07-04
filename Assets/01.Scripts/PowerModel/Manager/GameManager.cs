@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Akasha.Modifier;
 
 public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
 {

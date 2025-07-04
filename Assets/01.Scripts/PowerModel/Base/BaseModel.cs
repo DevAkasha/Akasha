@@ -1,5 +1,5 @@
-using System.Collections.Generic;
-
+﻿using System.Collections.Generic;
+using Akasha.Modifier;
 
 
 public abstract class BaseModel : IModifiableTarget, IRxCaller, IRxOwner

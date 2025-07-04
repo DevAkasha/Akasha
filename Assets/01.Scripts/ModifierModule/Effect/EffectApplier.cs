@@ -1,34 +1,37 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
-public class EffectApplier
+namespace Akasha.Modifier
 {
-    private readonly BaseEffect effect;
-    private readonly List<IModelOwner> targets = new();
-
-    public EffectApplier(BaseEffect effect)
+    public class EffectApplier
     {
-        this.effect = effect;
-    }
+        private readonly BaseEffect effect;
+        private readonly List<IModelOwner> targets = new();
 
-    public EffectApplier AddTarget(IModelOwner target)
-    {
-        if (target != null)
-            targets.Add(target);
-        return this;
-    }
+        public EffectApplier(BaseEffect effect)
+        {
+            this.effect = effect;
+        }
 
-    public void Apply()
-    {
-        if (!effect.Condition())
-            return;
+        public EffectApplier AddTarget(IModelOwner target)
+        {
+            if (target != null)
+                targets.Add(target);
+            return this;
+        }
 
-        foreach (var target in targets)
-            effect.ApplyTo(target);
-    }
+        public void Apply()
+        {
+            if (!effect.Condition())
+                return;
 
-    public void Remove()
-    {
-        foreach (var target in targets)
-            effect.RemoveFrom(target);
+            foreach (var target in targets)
+                effect.ApplyTo(target);
+        }
+
+        public void Remove()
+        {
+            foreach (var target in targets)
+                effect.RemoveFrom(target);
+        }
     }
 }

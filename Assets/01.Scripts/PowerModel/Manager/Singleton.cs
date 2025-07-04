@@ -1,33 +1,36 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 
-public abstract class Singleton<T> : MonoBehaviour where T : Singleton<T>
+namespace Akasha
 {
-    private static T instance;
-
-    public static T Instance
+    public abstract class Singleton<T> : MonoBehaviour where T : Singleton<T>
     {
-        get
+        private static T instance;
+
+        public static T Instance
         {
-            if (instance == null)
+            get
             {
-                instance = FindObjectOfType<T>();
+                if (instance == null)
+                {
+                    instance = FindObjectOfType<T>();
+                }
+                return instance;
             }
-            return instance;
         }
-    }
-    public static bool IsInstance => instance != null;
+        public static bool IsInstance => instance != null;
 
-    protected virtual void Awake()
-    {
-        if (instance == null || instance == this)
+        protected virtual void Awake()
         {
-            instance = (T)this;
-            DontDestroyOnLoad(gameObject);
-        }
-        else
-        {
-            Destroy(gameObject);
+            if (instance == null || instance == this)
+            {
+                instance = (T)this;
+                DontDestroyOnLoad(gameObject);
+            }
+            else
+            {
+                Destroy(gameObject);
+            }
         }
     }
 }

@@ -3,73 +3,76 @@ using System.Collections;
 using System.Collections.Generic;
 using Akasha.Modifier;
 
-public enum EffectApplyMode { Passive, Manual, Timed }
-
-public enum ModifierType
+namespace Akasha
 {
-    OriginAdd,
-    AddMultiplier,
-    Multiplier,
-    FinalAdd
-}
+    public enum EffectApplyMode { Passive, Manual, Timed }
 
-public interface IModifiableTarget
-{
-    IEnumerable<IModifiable> GetModifiables(); // 수정 가능한 필드 목록 반환
-}
+    public enum ModifierType
+    {
+        OriginAdd,
+        AddMultiplier,
+        Multiplier,
+        FinalAdd
+    }
 
-public interface IRxReadable<T>
-{
-    T Value { get; }
-    void AddListener(Action<T> listener); // 값 변경을 구독할 수 있음
-    void RemoveListener(Action<T> listener); // 구독 해제
-}
-public interface IRxField
-{
-    string FieldName { get; }
-}
+    public interface IModifiableTarget
+    {
+        IEnumerable<IModifiable> GetModifiables(); // 수정 가능한 필드 목록 반환
+    }
 
-public interface IRxField<T> : IRxField, IRxReadable<T> { }
+    public interface IRxReadable<T>
+    {
+        T Value { get; }
+        void AddListener(Action<T> listener); // 값 변경을 구독할 수 있음
+        void RemoveListener(Action<T> listener); // 구독 해제
+    }
+    public interface IRxField
+    {
+        string FieldName { get; }
+    }
 
-public interface IConditionCheckable
-{
-    bool Satisfies(Func<object, bool> predicate);
-}
+    public interface IRxField<T> : IRxField, IRxReadable<T> { }
 
-public interface IRxCaller
-{
-    bool IsLogicalCaller { get; }
-    bool IsMultiRolesCaller { get; }
-    bool IsFunctionalCaller { get; }
-}
+    public interface IConditionCheckable
+    {
+        bool Satisfies(Func<object, bool> predicate);
+    }
 
-public interface IRxOwner
-{
-    bool IsRxVarOwner { get; }
-    bool IsRxAllOwner { get; }
+    public interface IRxCaller
+    {
+        bool IsLogicalCaller { get; }
+        bool IsMultiRolesCaller { get; }
+        bool IsFunctionalCaller { get; }
+    }
 
-    void RegisterRx(RxBase rx);
+    public interface IRxOwner
+    {
+        bool IsRxVarOwner { get; }
+        bool IsRxAllOwner { get; }
 
-    public void Unload();
-}
+        void RegisterRx(RxBase rx);
 
-public interface IModelOwner  // GetComponent용 엔티티 인터페이스
-{
-    BaseModel GetBaseModel();
-}
+        public void Unload();
+    }
 
-public interface IModelOwner<M> : IModelOwner where M : BaseModel // 모델을 소유하는 엔티티 인터페이스
-{
-    M Model { get; }
-}
+    public interface IModelOwner  // GetComponent용 엔티티 인터페이스
+    {
+        BaseModel GetBaseModel();
+    }
 
-public interface IUIComponent
-{
-    void SetOwner(BaseView owner);
-    void Cleanup();
-}
+    public interface IModelOwner<M> : IModelOwner where M : BaseModel // 모델을 소유하는 엔티티 인터페이스
+    {
+        M Model { get; }
+    }
 
-public interface IBindable<T> : IUIComponent
-{
-    void Bind(T data);
+    public interface IUIComponent
+    {
+        void SetOwner(BaseView owner);
+        void Cleanup();
+    }
+
+    public interface IBindable<T> : IUIComponent
+    {
+        void Bind(T data);
+    }
 }

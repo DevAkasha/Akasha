@@ -4,221 +4,224 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public abstract class ContainerManager<T> : ManagerBase, IAggregateManager where T : AggregateRoot
+namespace Akasha
 {
-    [Header("Container Settings")]
-    [SerializeField] private bool enableDebugLogs = true;
-
-    private readonly Dictionary<int, T> registeredAggregates = new();
-    private readonly Dictionary<int, T> pooledObjects = new();
-    private int nextIndex = 0;
-
-    public int RegisteredCount => registeredAggregates.Count;
-    public int PooledCount => pooledObjects.Count;
-
-    protected override void OnManagerAwake()
+    public abstract class ContainerManager<T> : ManagerBase, IAggregateManager where T : AggregateRoot
     {
-        Debug.Log($"[{GetType().Name}] Initialized - Managing {typeof(T).Name} aggregates");
-    }
+        [Header("Container Settings")]
+        [SerializeField] private bool enableDebugLogs = true;
 
-    protected override void OnManagerDestroy()
-    {
-        DeinitializeAll();
-        ClearPool();
-        registeredAggregates.Clear();
-    }
+        private readonly Dictionary<int, T> registeredAggregates = new();
+        private readonly Dictionary<int, T> pooledObjects = new();
+        private int nextIndex = 0;
 
-    public int GetNextIndex(AggregateType type)
-    {
-        return nextIndex++;
-    }
+        public int RegisteredCount => registeredAggregates.Count;
+        public int PooledCount => pooledObjects.Count;
 
-    public void RegisterAggregate(AggregateRoot aggregate)
-    {
-        if (!(aggregate is T typedAggregate))
+        protected override void OnManagerAwake()
         {
-            LogWarning($"Cannot register aggregate of type {aggregate.GetType().Name} to {typeof(T).Name} manager");
-            return;
+            Debug.Log($"[{GetType().Name}] Initialized - Managing {typeof(T).Name} aggregates");
         }
 
-        int instanceId = aggregate.InstanceId;
-        if (registeredAggregates.ContainsKey(instanceId))
+        protected override void OnManagerDestroy()
         {
-            LogWarning($"Aggregate already registered: {aggregate}");
-            return;
+            DeinitializeAll();
+            ClearPool();
+            registeredAggregates.Clear();
         }
 
-        registeredAggregates[instanceId] = typedAggregate;
-        OnAggregateRegistered(typedAggregate);
-        Log($"Registered: {aggregate}");
-    }
-
-    public void UnregisterAggregate(AggregateRoot aggregate)
-    {
-        if (!(aggregate is T typedAggregate))
-            return;
-
-        int instanceId = aggregate.InstanceId;
-        if (!registeredAggregates.Remove(instanceId))
+        public int GetNextIndex(AggregateType type)
         {
-            LogWarning($"Aggregate not found for unregister: {aggregate}");
-            return;
+            return nextIndex++;
         }
 
-        pooledObjects.Remove(instanceId);
-        OnAggregateUnregistered(typedAggregate);
-        Log($"Unregistered: {aggregate}");
-    }
-
-    protected virtual void OnAggregateRegistered(T aggregate) { }
-    protected virtual void OnAggregateUnregistered(T aggregate) { }
-
-    public T GetById(int instanceId)
-    {
-        registeredAggregates.TryGetValue(instanceId, out var aggregate);
-        return aggregate;
-    }
-
-    public IEnumerable<T> GetAll()
-    {
-        return registeredAggregates.Values;
-    }
-
-    public IEnumerable<T> GetInitialized()
-    {
-        return registeredAggregates.Values.Where(a => a.IsInitialized);
-    }
-
-    public IEnumerable<T> GetPooled()
-    {
-        return pooledObjects.Values;
-    }
-
-    public T GetFromPool<TSpecific>() where TSpecific : T
-    {
-        var pooled = pooledObjects.Values.OfType<TSpecific>().FirstOrDefault();
-        if (pooled != null)
+        public void RegisterAggregate(AggregateRoot aggregate)
         {
-            pooled.SetInPool(false);
-            pooledObjects.Remove(pooled.InstanceId);
-            Log($"Retrieved from pool: {pooled}");
-            return pooled;
-        }
-        return null;
-    }
+            if (!(aggregate is T typedAggregate))
+            {
+                LogWarning($"Cannot register aggregate of type {aggregate.GetType().Name} to {typeof(T).Name} manager");
+                return;
+            }
 
-    public void ReturnToPool(T aggregate)
-    {
-        if (aggregate.isInPool)
-        {
-            LogWarning($"Aggregate {aggregate} is already in pool");
-            return;
+            int instanceId = aggregate.InstanceId;
+            if (registeredAggregates.ContainsKey(instanceId))
+            {
+                LogWarning($"Aggregate already registered: {aggregate}");
+                return;
+            }
+
+            registeredAggregates[instanceId] = typedAggregate;
+            OnAggregateRegistered(typedAggregate);
+            Log($"Registered: {aggregate}");
         }
 
-        aggregate.SetInPool(true);
-        pooledObjects[aggregate.InstanceId] = aggregate;
-        Log($"Returned to pool: {aggregate}");
-    }
-
-    public void SetActive(T aggregate, bool active)
-    {
-        if (aggregate == null) return;
-
-        aggregate.gameObject.SetActive(active);
-        Log($"Set {aggregate} active: {active}");
-    }
-
-    public void SetActiveAll(bool active)
-    {
-        foreach (var aggregate in registeredAggregates.Values)
+        public void UnregisterAggregate(AggregateRoot aggregate)
         {
-            SetActive(aggregate, active);
+            if (!(aggregate is T typedAggregate))
+                return;
+
+            int instanceId = aggregate.InstanceId;
+            if (!registeredAggregates.Remove(instanceId))
+            {
+                LogWarning($"Aggregate not found for unregister: {aggregate}");
+                return;
+            }
+
+            pooledObjects.Remove(instanceId);
+            OnAggregateUnregistered(typedAggregate);
+            Log($"Unregistered: {aggregate}");
         }
-        Log($"Set all aggregates active: {active}");
-    }
 
-    public void InitializeAll()
-    {
-        foreach (var aggregate in registeredAggregates.Values.Where(a => !a.IsInitialized))
+        protected virtual void OnAggregateRegistered(T aggregate) { }
+        protected virtual void OnAggregateUnregistered(T aggregate) { }
+
+        public T GetById(int instanceId)
         {
-            aggregate.PerformInitialization();
+            registeredAggregates.TryGetValue(instanceId, out var aggregate);
+            return aggregate;
         }
-        Log("Initialized all aggregates");
-    }
 
-    public void DeinitializeAll()
-    {
-        foreach (var aggregate in registeredAggregates.Values.Where(a => a.IsInitialized))
+        public IEnumerable<T> GetAll()
         {
-            aggregate.PerformDeinitialization();
+            return registeredAggregates.Values;
         }
-        Log("Deinitialized all aggregates");
-    }
 
-    public void ClearPool()
-    {
-        foreach (var pooled in pooledObjects.Values.ToArray())
+        public IEnumerable<T> GetInitialized()
         {
+            return registeredAggregates.Values.Where(a => a.IsInitialized);
+        }
+
+        public IEnumerable<T> GetPooled()
+        {
+            return pooledObjects.Values;
+        }
+
+        public T GetFromPool<TSpecific>() where TSpecific : T
+        {
+            var pooled = pooledObjects.Values.OfType<TSpecific>().FirstOrDefault();
             if (pooled != null)
             {
-                Destroy(pooled.gameObject);
+                pooled.SetInPool(false);
+                pooledObjects.Remove(pooled.InstanceId);
+                Log($"Retrieved from pool: {pooled}");
+                return pooled;
+            }
+            return null;
+        }
+
+        public void ReturnToPool(T aggregate)
+        {
+            if (aggregate.isInPool)
+            {
+                LogWarning($"Aggregate {aggregate} is already in pool");
+                return;
+            }
+
+            aggregate.SetInPool(true);
+            pooledObjects[aggregate.InstanceId] = aggregate;
+            Log($"Returned to pool: {aggregate}");
+        }
+
+        public void SetActive(T aggregate, bool active)
+        {
+            if (aggregate == null) return;
+
+            aggregate.gameObject.SetActive(active);
+            Log($"Set {aggregate} active: {active}");
+        }
+
+        public void SetActiveAll(bool active)
+        {
+            foreach (var aggregate in registeredAggregates.Values)
+            {
+                SetActive(aggregate, active);
+            }
+            Log($"Set all aggregates active: {active}");
+        }
+
+        public void InitializeAll()
+        {
+            foreach (var aggregate in registeredAggregates.Values.Where(a => !a.IsInitialized))
+            {
+                aggregate.PerformInitialization();
+            }
+            Log("Initialized all aggregates");
+        }
+
+        public void DeinitializeAll()
+        {
+            foreach (var aggregate in registeredAggregates.Values.Where(a => a.IsInitialized))
+            {
+                aggregate.PerformDeinitialization();
+            }
+            Log("Deinitialized all aggregates");
+        }
+
+        public void ClearPool()
+        {
+            foreach (var pooled in pooledObjects.Values.ToArray())
+            {
+                if (pooled != null)
+                {
+                    Destroy(pooled.gameObject);
+                }
+            }
+            pooledObjects.Clear();
+            Log("Cleared object pool");
+        }
+
+        public override void OnSceneUnloaded(Scene scene)
+        {
+            base.OnSceneUnloaded(scene);
+            CleanupSceneAggregates(scene);
+        }
+
+        private void CleanupSceneAggregates(Scene scene)
+        {
+            var toRemove = registeredAggregates.Values
+                .Where(a => a != null && a.gameObject.scene == scene && a.isSceneCreated)
+                .ToArray();
+
+            foreach (var aggregate in toRemove)
+            {
+                UnregisterAggregate(aggregate);
+            }
+
+            if (toRemove.Length > 0)
+            {
+                Log($"Cleaned up {toRemove.Length} scene aggregates");
             }
         }
-        pooledObjects.Clear();
-        Log("Cleared object pool");
-    }
 
-    public override void OnSceneUnloaded(Scene scene)
-    {
-        base.OnSceneUnloaded(scene);
-        CleanupSceneAggregates(scene);
-    }
-
-    private void CleanupSceneAggregates(Scene scene)
-    {
-        var toRemove = registeredAggregates.Values
-            .Where(a => a != null && a.gameObject.scene == scene && a.isSceneCreated)
-            .ToArray();
-
-        foreach (var aggregate in toRemove)
+        private void Log(string message)
         {
-            UnregisterAggregate(aggregate);
+            if (enableDebugLogs)
+            {
+                Debug.Log($"[{GetType().Name}] {message}");
+            }
         }
 
-        if (toRemove.Length > 0)
+        private void LogWarning(string message)
         {
-            Log($"Cleaned up {toRemove.Length} scene aggregates");
+            if (enableDebugLogs)
+            {
+                Debug.LogWarning($"[{GetType().Name}] {message}");
+            }
         }
-    }
-
-    private void Log(string message)
-    {
-        if (enableDebugLogs)
-        {
-            Debug.Log($"[{GetType().Name}] {message}");
-        }
-    }
-
-    private void LogWarning(string message)
-    {
-        if (enableDebugLogs)
-        {
-            Debug.LogWarning($"[{GetType().Name}] {message}");
-        }
-    }
 
 #if UNITY_EDITOR
-    protected override void OnValidate()
-    {
-        base.OnValidate();
-        if (Application.isPlaying)
+        protected override void OnValidate()
         {
-            debugInfo = $"Registered: {RegisteredCount}\n" +
-                       $"Pooled: {PooledCount}\n" +
-                       $"Managing: {typeof(T).Name}";
+            base.OnValidate();
+            if (Application.isPlaying)
+            {
+                debugInfo = $"Registered: {RegisteredCount}\n" +
+                           $"Pooled: {PooledCount}\n" +
+                           $"Managing: {typeof(T).Name}";
+            }
         }
-    }
 #endif
+    }
 }
 
 

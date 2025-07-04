@@ -1,65 +1,68 @@
 ﻿using System;
 using System.Collections.Generic;
 
-public sealed class RxVar<T> : RxBase, IRxReadable<T>
+namespace Akasha
 {
-    private T value;
-    private readonly List<Action<T>> listeners = new();
-
-    public RxVar(T initialValue = default, IRxOwner owner = null)
+    public sealed class RxVar<T> : RxBase, IRxReadable<T>
     {
-        value = initialValue;
-        owner?.RegisterRx(this);
-    }
+        private T value;
+        private readonly List<Action<T>> listeners = new();
 
-    public T Value => value;
-
-    public void SetValue(T newValue, IRxCaller caller) // 값 설정
-    {
-        if (!caller.IsMultiRolesCaller)
-            throw new InvalidOperationException($"An invalid caller({caller}) has accessed.");
-
-        if (!EqualityComparer<T>.Default.Equals(value, newValue))
+        public RxVar(T initialValue = default, IRxOwner owner = null)
         {
-            value = newValue;
-            NotifyAll();
+            value = initialValue;
+            owner?.RegisterRx(this);
         }
-    }
 
-    public void Set(T newValue) // 값 설정
-    {
-        if (!EqualityComparer<T>.Default.Equals(value, newValue))
+        public T Value => value;
+
+        public void SetValue(T newValue, IRxCaller caller) // 값 설정
         {
-            value = newValue;
-            NotifyAll();
-        }
-    }
+            if (!caller.IsMultiRolesCaller)
+                throw new InvalidOperationException($"An invalid caller({caller}) has accessed.");
 
-    public void AddListener(Action<T> listener) // 값 변경을 구독할 수 있음
-    {
-        if (listener != null)
+            if (!EqualityComparer<T>.Default.Equals(value, newValue))
+            {
+                value = newValue;
+                NotifyAll();
+            }
+        }
+
+        public void Set(T newValue) // 값 설정
         {
-            listeners.Add(listener);
-            listener(value);
+            if (!EqualityComparer<T>.Default.Equals(value, newValue))
+            {
+                value = newValue;
+                NotifyAll();
+            }
         }
-    }
 
-    public void RemoveListener(Action<T> listener) // 구독 해제
-    {
-        if (listener != null)
+        public void AddListener(Action<T> listener) // 값 변경을 구독할 수 있음
         {
-            listeners.Remove(listener);
+            if (listener != null)
+            {
+                listeners.Add(listener);
+                listener(value);
+            }
         }
-    }
 
-    public override void ClearRelation()
-    {
-        listeners.Clear();
-    }
+        public void RemoveListener(Action<T> listener) // 구독 해제
+        {
+            if (listener != null)
+            {
+                listeners.Remove(listener);
+            }
+        }
 
-    private void NotifyAll()
-    {
-        foreach (var listener in listeners)
-            listener(value);
+        public override void ClearRelation()
+        {
+            listeners.Clear();
+        }
+
+        private void NotifyAll()
+        {
+            foreach (var listener in listeners)
+                listener(value);
+        }
     }
 }

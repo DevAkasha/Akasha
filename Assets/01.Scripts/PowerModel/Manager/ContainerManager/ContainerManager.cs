@@ -4,36 +4,33 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public class ContainerManager<T> : ManagerBase, IAggregateManager where T : AggregateRoot
+public abstract class ContainerManager<T> : ManagerBase, IAggregateManager where T : AggregateRoot
 {
     [Header("Container Settings")]
     [SerializeField] private bool enableDebugLogs = true;
 
     private readonly Dictionary<int, T> registeredAggregates = new();
-    private readonly Dictionary<AggregateType, int> typeCounters = new();
-    private readonly Dictionary<AggregateType, List<T>> typeGroups = new();
     private readonly Dictionary<int, T> pooledObjects = new();
+    private int nextIndex = 0;
 
     public int RegisteredCount => registeredAggregates.Count;
     public int PooledCount => pooledObjects.Count;
 
     protected override void OnManagerAwake()
     {
-        InitializeTypeCounters();
+        Debug.Log($"[{GetType().Name}] Initialized - Managing {typeof(T).Name} aggregates");
     }
 
-    private void InitializeTypeCounters()
+    protected override void OnManagerDestroy()
     {
-        foreach (AggregateType type in Enum.GetValues(typeof(AggregateType)))
-        {
-            typeCounters[type] = 0;
-            typeGroups[type] = new List<T>();
-        }
+        DeinitializeAll();
+        ClearPool();
+        registeredAggregates.Clear();
     }
 
     public int GetNextIndex(AggregateType type)
     {
-        return typeCounters[type]++;
+        return nextIndex++;
     }
 
     public void RegisterAggregate(AggregateRoot aggregate)
@@ -52,8 +49,6 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
         }
 
         registeredAggregates[instanceId] = typedAggregate;
-        typeGroups[aggregate.AggregateType].Add(typedAggregate);
-
         OnAggregateRegistered(typedAggregate);
         Log($"Registered: {aggregate}");
     }
@@ -61,21 +56,16 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
     public void UnregisterAggregate(AggregateRoot aggregate)
     {
         if (!(aggregate is T typedAggregate))
-        {
             return;
-        }
 
         int instanceId = aggregate.InstanceId;
-        if (!registeredAggregates.TryGetValue(instanceId, out var registered))
+        if (!registeredAggregates.Remove(instanceId))
         {
             LogWarning($"Aggregate not found for unregister: {aggregate}");
             return;
         }
 
-        registeredAggregates.Remove(instanceId);
-        typeGroups[aggregate.AggregateType].Remove(typedAggregate);
         pooledObjects.Remove(instanceId);
-
         OnAggregateUnregistered(typedAggregate);
         Log($"Unregistered: {aggregate}");
     }
@@ -87,11 +77,6 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
     {
         registeredAggregates.TryGetValue(instanceId, out var aggregate);
         return aggregate;
-    }
-
-    public IEnumerable<T> GetByType(AggregateType type)
-    {
-        return typeGroups.TryGetValue(type, out var list) ? list : Enumerable.Empty<T>();
     }
 
     public IEnumerable<T> GetAll()
@@ -111,7 +96,7 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
 
     public T GetFromPool<TSpecific>() where TSpecific : T
     {
-        var pooled = pooledObjects.Values.OfType<TSpecific>().FirstOrDefault(p => p.EnablePooling);
+        var pooled = pooledObjects.Values.OfType<TSpecific>().FirstOrDefault();
         if (pooled != null)
         {
             pooled.SetInPool(false);
@@ -124,13 +109,7 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
 
     public void ReturnToPool(T aggregate)
     {
-        if (!aggregate.EnablePooling)
-        {
-            LogWarning($"Aggregate {aggregate} does not support pooling");
-            return;
-        }
-
-        if (aggregate.IsInPool)
+        if (aggregate.isInPool)
         {
             LogWarning($"Aggregate {aggregate} is already in pool");
             return;
@@ -149,18 +128,18 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
         Log($"Set {aggregate} active: {active}");
     }
 
-    public void SetActiveByType(AggregateType type, bool active)
+    public void SetActiveAll(bool active)
     {
-        foreach (var aggregate in GetByType(type))
+        foreach (var aggregate in registeredAggregates.Values)
         {
             SetActive(aggregate, active);
         }
-        Log($"Set type {type} active: {active}");
+        Log($"Set all aggregates active: {active}");
     }
 
     public void InitializeAll()
     {
-        foreach (var aggregate in registeredAggregates.Values.Where(a => a.EnableInitialization && !a.IsInitialized))
+        foreach (var aggregate in registeredAggregates.Values.Where(a => !a.IsInitialized))
         {
             aggregate.PerformInitialization();
         }
@@ -189,14 +168,6 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
         Log("Cleared object pool");
     }
 
-    protected override void OnManagerDestroy()
-    {
-        base.OnManagerDestroy();
-        DeinitializeAll();
-        ClearPool();
-        registeredAggregates.Clear();
-    }
-
     public override void OnSceneUnloaded(Scene scene)
     {
         base.OnSceneUnloaded(scene);
@@ -206,7 +177,7 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
     private void CleanupSceneAggregates(Scene scene)
     {
         var toRemove = registeredAggregates.Values
-            .Where(a => a != null && a.gameObject.scene == scene && a.IsSceneCreated)
+            .Where(a => a != null && a.gameObject.scene == scene && a.isSceneCreated)
             .ToArray();
 
         foreach (var aggregate in toRemove)
@@ -218,16 +189,6 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
         {
             Log($"Cleaned up {toRemove.Length} scene aggregates");
         }
-    }
-
-    public Dictionary<AggregateType, int> GetTypeStatistics()
-    {
-        var stats = new Dictionary<AggregateType, int>();
-        foreach (var type in typeGroups.Keys)
-        {
-            stats[type] = typeGroups[type].Count;
-        }
-        return stats;
     }
 
     private void Log(string message)
@@ -252,15 +213,13 @@ public class ContainerManager<T> : ManagerBase, IAggregateManager where T : Aggr
         base.OnValidate();
         if (Application.isPlaying)
         {
-            var stats = GetTypeStatistics();
-            var statsText = stats.Count > 0
-                ? string.Join("\n", stats.Select(kvp => $"  {kvp.Key}: {kvp.Value}"))
-                : "  No aggregates";
-
             debugInfo = $"Registered: {RegisteredCount}\n" +
                        $"Pooled: {PooledCount}\n" +
-                       $"Type Distribution:\n{statsText}";
+                       $"Managing: {typeof(T).Name}";
         }
     }
 #endif
 }
+
+
+

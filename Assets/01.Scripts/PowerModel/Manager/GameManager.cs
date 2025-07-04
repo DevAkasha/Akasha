@@ -7,15 +7,18 @@ using UnityEngine.SceneManagement;
 public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
 {
     [Header("Core Manager References")]
-    [SerializeField] private UIManager uiManager;
-    [SerializeField] private WorldManager worldManager;
+    [SerializeField] private ControllerManager controllerManager;
+    [SerializeField] private ModelControllerManager modelControllerManager;
+    [SerializeField] private PresenterManager presenterManager;
 
     private readonly List<ManagerBase> allManagers = new();
     private bool isInitialized = false;
     private bool isProjectInitialized = false;
 
-    public static UIManager UI => Instance?.uiManager;
-    public static WorldManager World => Instance?.worldManager;
+    public static ControllerManager Controllers => Instance?.controllerManager;
+    public static ModelControllerManager ModelControllers => Instance?.modelControllerManager;
+    public static PresenterManager Presenters => Instance?.presenterManager;
+
     public bool IsProjectInitialized => isProjectInitialized;
 
     public bool IsRxVarOwner => true;
@@ -86,19 +89,21 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
         var managers = FindObjectsOfType<ManagerBase>(true);
         allManagers.AddRange(managers);
 
-        var uiMgr = FindObjectOfType<UIManager>(true);
-        var worldMgr = FindObjectOfType<WorldManager>(true);
+        var controllerMgr = FindObjectOfType<ControllerManager>(true);
+        var modelControllerMgr = FindObjectOfType<ModelControllerManager>(true);
+        var presenterMgr = FindObjectOfType<PresenterManager>(true);
 
-        if (uiMgr != null && !allManagers.Contains(uiMgr))
-            allManagers.Add(uiMgr);
+        if (controllerMgr != null && !allManagers.Contains(controllerMgr))
+            allManagers.Add(controllerMgr);
 
-        if (worldMgr != null && !allManagers.Contains(worldMgr))
-            allManagers.Add(worldMgr);
+        if (modelControllerMgr != null && !allManagers.Contains(modelControllerMgr))
+            allManagers.Add(modelControllerMgr);
 
-        // 1단계: 매니저 참조 먼저 설정
+        if (presenterMgr != null && !allManagers.Contains(presenterMgr))
+            allManagers.Add(presenterMgr);
+
         InitializeProject();
 
-        // 2단계: 우선순위 기반으로 Awake 호출
         var sortedManagers = allManagers
             .OrderBy(m => m.InitializationPriority)
             .ThenBy(m => m.name)
@@ -106,17 +111,17 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
 
         foreach (var manager in sortedManagers)
         {
-            // 이미 Awake가 호출된 매니저들은 OnManagerAwake만 다시 호출
             if (manager.gameObject.activeInHierarchy)
             {
-                manager.CallOnManagerAwake(); // 새로운 public 메서드 필요
+                manager.CallOnManagerAwake();
             }
 
             Debug.Log($"[GameManager] Initialized: {manager.GetType().Name} (Priority: {manager.InitializationPriority})");
         }
 
-        uiManager = uiMgr;
-        worldManager = worldMgr;
+        controllerManager = controllerMgr;
+        modelControllerManager = modelControllerMgr;
+        presenterManager = presenterMgr;
 
         isInitialized = true;
     }
@@ -142,6 +147,71 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
     public T GetManager<T>() where T : class
     {
         return allManagers.FirstOrDefault(m => m is T) as T;
+    }
+
+    public T GetController<T>() where T : BaseController
+    {
+        return Controllers?.GetController<T>();
+    }
+
+    public T GetModelController<T>() where T : MController
+    {
+        return ModelControllers?.GetModelController<T>();
+    }
+
+    public T GetPresenter<T>() where T : BasePresenter
+    {
+        return Presenters?.GetPresenter<T>();
+    }
+
+    public void SaveAllModels()
+    {
+        ModelControllers?.SaveAllModels();
+        Debug.Log("[GameManager] Saved all models");
+    }
+
+    public void LoadAllModels()
+    {
+        ModelControllers?.LoadAllModels();
+        Debug.Log("[GameManager] Loaded all models");
+    }
+
+    public void ShowAllPresenters()
+    {
+        Presenters?.ShowAll();
+        Debug.Log("[GameManager] Showed all presenters");
+    }
+
+    public void HideAllPresenters()
+    {
+        Presenters?.HideAll();
+        Debug.Log("[GameManager] Hid all presenters");
+    }
+
+    public void InitializeAllControllers()
+    {
+        Controllers?.InitializeAll();
+        ModelControllers?.InitializeAll();
+        Debug.Log("[GameManager] Initialized all controllers");
+    }
+
+    public void DeinitializeAllControllers()
+    {
+        Controllers?.DeinitializeAll();
+        ModelControllers?.DeinitializeAll();
+        Debug.Log("[GameManager] Deinitialized all controllers");
+    }
+
+    public void InitializeAllPresenters()
+    {
+        Presenters?.InitializeAll();
+        Debug.Log("[GameManager] Initialized all presenters");
+    }
+
+    public void DeinitializeAllPresenters()
+    {
+        Presenters?.DeinitializeAll();
+        Debug.Log("[GameManager] Deinitialized all presenters");
     }
 
     private void RegisterSceneEvents()
@@ -194,6 +264,43 @@ public partial class GameManager : Singleton<GameManager>, IRxOwner, IRxCaller
         }
     }
 
+    public Dictionary<string, int> GetSystemStatistics()
+    {
+        var stats = new Dictionary<string, int>();
+
+        if (Controllers != null)
+        {
+            stats["Controllers"] = Controllers.RegisteredCount;
+            stats["Pooled Controllers"] = Controllers.PooledCount;
+        }
+
+        if (ModelControllers != null)
+        {
+            stats["Model Controllers"] = ModelControllers.RegisteredCount;
+            stats["Pooled Model Controllers"] = ModelControllers.PooledCount;
+        }
+
+        if (Presenters != null)
+        {
+            stats["Presenters"] = Presenters.RegisteredCount;
+            stats["Pooled Presenters"] = Presenters.PooledCount;
+            stats["Total Views"] = Presenters.GetTotalViewCount();
+        }
+
+        stats["Total Managers"] = allManagers.Count;
+        stats["Tracked RxVars"] = trackedRxVars.Count;
+
+        return stats;
+    }
+
+    public void PrintSystemStatus()
+    {
+        var stats = GetSystemStatistics();
+        var statusText = string.Join("\n", stats.Select(kvp => $"  {kvp.Key}: {kvp.Value}"));
+
+        Debug.Log($"[GameManager] System Status:\n{statusText}");
+    }
+
     partial void InitializeProject();
     partial void ShutdownProject();
 }
@@ -224,13 +331,31 @@ public partial class GameManager
             Debug.Log("[GameManager] ModifierManager successfully initialized");
         }
 
-        // 참조 설정 완료 플래그
-        isProjectInitialized = true; // 이제 접근 가능
-        Debug.Log("[GameManager] Project initialization completed - managers ready");
+        if (effectManager == null)
+        {
+            Debug.LogError("[GameManager] EffectManager not found! Please add EffectManager component to the scene.");
+        }
+        else
+        {
+            Debug.Log("[GameManager] EffectManager successfully initialized");
+        }
+
+        if (effectRunner == null)
+        {
+            Debug.LogError("[GameManager] EffectRunner not found! Please add EffectRunner component to the scene.");
+        }
+        else
+        {
+            Debug.Log("[GameManager] EffectRunner successfully initialized");
+        }
+
+        isProjectInitialized = true;
+        Debug.Log("[GameManager] Project initialization completed - all managers ready");
     }
 
     partial void ShutdownProject()
     {
         isProjectInitialized = false;
+        Debug.Log("[GameManager] Project shutdown completed");
     }
 }

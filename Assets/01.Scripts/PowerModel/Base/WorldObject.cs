@@ -1,8 +1,0 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-
-public abstract class WorldObject : MonoBehaviour //나중에 명칭 바꿔야함
-{
-
-}

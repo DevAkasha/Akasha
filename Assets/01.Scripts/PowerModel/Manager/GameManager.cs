@@ -314,16 +314,19 @@ namespace Akasha
         [SerializeField] private EffectManager effectManager;
         [SerializeField] private EffectRunner effectRunner;
         [SerializeField] private ModifierManager modifierManager;
+        [SerializeField] private SaveLoadManager saveLoadManager;
 
         public static EffectManager Effect => Instance?.effectManager;
         public static EffectRunner EffectRunner => Instance?.effectRunner;
         public static ModifierManager Modifier => Instance?.modifierManager;
+        public static SaveLoadManager SaveLoad => Instance?.saveLoadManager;
 
         partial void InitializeProject()
         {
             effectManager = GetManager<EffectManager>();
             effectRunner = GetManager<EffectRunner>();
             modifierManager = GetManager<ModifierManager>();
+            saveLoadManager = GetManager<SaveLoadManager>();
 
             if (modifierManager == null)
             {
@@ -350,6 +353,15 @@ namespace Akasha
             else
             {
                 Debug.Log("[GameManager] EffectRunner successfully initialized");
+            }
+
+            if (saveLoadManager == null)
+            {
+                Debug.LogError("[GameManager] SaveLoadManager not found! Please add SaveLoadManager component to the scene.");
+            }
+            else
+            {
+                Debug.Log("[GameManager] SaveLoadManager successfully initialized");
             }
 
             isProjectInitialized = true;

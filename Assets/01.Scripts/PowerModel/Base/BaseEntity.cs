@@ -5,28 +5,13 @@ using UnityEngine;
 
 namespace Akasha
 {
-    public abstract class BaseEntity : AggregateRoot, IModelOwner, IRxCaller
+    public abstract class BaseEntity : MonoBehaviour, IModelOwner, IRxCaller
     {
         public bool IsLogicalCaller => true;
         public bool IsMultiRolesCaller => true;
         public bool IsFunctionalCaller => true;
 
         public abstract BaseModel GetBaseModel();
-
-        protected override void OnInitialize()
-        {
-            base.OnInitialize();
-            OnEntityInitialize();
-        }
-
-        protected override void OnDeinitialize()
-        {
-            OnEntityDeinitialize();
-            base.OnDeinitialize();
-        }
-
-        protected virtual void OnEntityInitialize() { }
-        protected virtual void OnEntityDeinitialize() { }
     }
 
     public abstract class BaseEntity<M> : BaseEntity, IModelOwner<M> where M : BaseModel
@@ -162,18 +147,6 @@ namespace Akasha
         protected virtual void AtDisable() { }
         protected virtual void AtDeinit() { }
         protected virtual void AtDestroy() { }
-
-        protected override void OnEntityInitialize()
-        {
-            base.OnEntityInitialize();
-        }
-
-        protected override void OnEntityDeinitialize()
-        {
-            Model?.Unload();
-            base.OnEntityDeinitialize();
-        }
-
         protected abstract void SetupModel();
     }
 }

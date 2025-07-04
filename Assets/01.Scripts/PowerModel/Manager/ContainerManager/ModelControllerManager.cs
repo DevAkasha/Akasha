@@ -38,7 +38,7 @@ namespace Akasha
         {
             foreach (var controller in GetAll())
             {
-                if (controller is ModelAggregate modelAggregate && modelAggregate.IsDirty)
+                if (controller is ModelAggregate modelAggregate && modelAggregate.isDirty)
                 {
                     modelAggregate.Save();
                 }

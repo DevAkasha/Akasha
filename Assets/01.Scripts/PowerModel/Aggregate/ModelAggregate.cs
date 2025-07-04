@@ -8,7 +8,7 @@ namespace Akasha
         protected virtual bool EnablePooling => false;
 
         [SerializeField] protected bool isModelInitialized = false;
-        [SerializeField] protected bool isDirty = false;
+        public bool isDirty = false;
 
         public bool IsRxVarOwner => true;
         public bool IsRxAllOwner => true;
@@ -19,7 +19,6 @@ namespace Akasha
         private readonly HashSet<RxBase> trackedRxVars = new();
 
         public bool IsModelInitialized => isModelInitialized;
-        public bool IsDirty => isDirty;
 
         public void RegisterRx(RxBase rx)
         {
@@ -87,11 +86,23 @@ namespace Akasha
 
             PerformSave();
             isDirty = false;
+
+            // 전체 게임 상태 저장
+            if (GameManager.SaveLoad != null)
+            {
+                GameManager.SaveLoad.SaveGame();
+            }
         }
 
         public virtual void Load()
         {
             if (!EnableSaveLoad) return;
+
+            // 전체 게임 상태 로드
+            if (GameManager.SaveLoad != null)
+            {
+                GameManager.SaveLoad.LoadGame();
+            }
 
             PerformLoad();
             isDirty = false;

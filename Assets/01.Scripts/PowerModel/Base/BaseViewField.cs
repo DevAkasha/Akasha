@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
-
+using Akasha.State; 
 #region Slot 기본 인터페이스 및 베이스 클래스
 public interface IViewSlot
 {

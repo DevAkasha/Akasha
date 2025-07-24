@@ -232,18 +232,18 @@ namespace Akasha
             }
         }
 
-        protected virtual void CallLoad()
+        public virtual void CallLoad()
         {
             PerformLoad();
             AtLoad();
         }
 
-        protected virtual void CallReadyModel()
+        public virtual void CallReadyModel()
         {
             AtReadyModel();
         }
 
-        protected virtual void CallSave()
+        public virtual void CallSave()
         {
             AtSave();
             PerformSave();
@@ -272,7 +272,7 @@ namespace Akasha
         protected virtual void AtReadyModel() { }
         protected virtual void AtSave() { }
 
-        protected void MarkDirty()
+        public void MarkDirty()
         {
             isDirty = true;
             OnMarkDirty();

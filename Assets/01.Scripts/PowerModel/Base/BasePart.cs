@@ -2,23 +2,8 @@
 
 namespace Akasha
 {
-    public abstract class BasePart : AggregateRoot
+    public abstract class BasePart : MonoBehaviour
     {
-        protected override void OnInitialize()
-        {
-            base.OnInitialize();
-            OnPartInitialize();
-        }
-
-        protected override void OnDeinitialize()
-        {
-            OnPartDeinitialize();
-            base.OnDeinitialize();
-        }
-
-        protected virtual void OnPartInitialize() { }
-        protected virtual void OnPartDeinitialize() { }
-
         private bool isLifecycleInitialized = false;
 
         public void CallAwake()
@@ -41,17 +26,27 @@ namespace Akasha
             AtDisable();
         }
 
-        public void CallDestroy()
-        {
-            AtDestroy();
-        }
-
         public void CallInit()
         {
             if (isLifecycleInitialized) return;
 
             AtInit();
             isLifecycleInitialized = true;
+        }
+
+        public void CallLoad()
+        {
+            AtLoad();
+        }
+
+        public void CallReadyModel()
+        {
+            AtReadyModel();
+        }
+
+        public void CallSave()
+        {
+            AtSave();
         }
 
         public void CallDeinit()
@@ -62,12 +57,20 @@ namespace Akasha
             isLifecycleInitialized = false;
         }
 
+        public void CallDestroy()
+        {
+            AtDestroy();
+        }
+
+        protected virtual void AtEnable() { }
         protected virtual void AtAwake() { }
         protected virtual void AtStart() { }
         protected virtual void AtInit() { }
-        protected virtual void AtEnable() { }
-        protected virtual void AtDisable() { }
+        protected virtual void AtLoad() { }
+        protected virtual void AtReadyModel() { }
+        protected virtual void AtSave() { }
         protected virtual void AtDeinit() { }
+        protected virtual void AtDisable() { }
         protected virtual void AtDestroy() { }
 
         public abstract void RegistEntity(object entity);
@@ -106,16 +109,6 @@ namespace Akasha
         private void RegisterModel(M model)
         {
             Model = model;
-        }
-
-        protected override void OnPartInitialize()
-        {
-            base.OnPartInitialize();
-        }
-
-        protected override void OnPartDeinitialize()
-        {
-            base.OnPartDeinitialize();
         }
     }
 }

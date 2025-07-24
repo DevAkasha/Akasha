@@ -27,9 +27,7 @@ namespace Akasha
 
         public void CallAwake()
         {
-            AtSetModel();
             SetupModel();
-
             InitializeParts();
 
             foreach (var part in allParts)
@@ -70,16 +68,6 @@ namespace Akasha
             AtDisable();
         }
 
-        public void CallDestroy()
-        {
-            foreach (var part in allParts)
-            {
-                part.CallDestroy();
-            }
-            AtDestroy();
-            Model.Unload();
-        }
-
         public void CallInit()
         {
             if (isLifecycleInitialized) return;
@@ -93,6 +81,36 @@ namespace Akasha
             isLifecycleInitialized = true;
         }
 
+        public void CallLoad()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallLoad();
+            }
+
+            AtLoad();
+        }
+
+        public void CallReadyModel()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallReadyModel();
+            }
+
+            AtReadyModel();
+        }
+
+        public void CallSave()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallSave();
+            }
+
+            AtSave();
+        }
+
         public void CallDeinit()
         {
             if (!isLifecycleInitialized) return;
@@ -101,9 +119,20 @@ namespace Akasha
             {
                 part.CallDeinit();
             }
+
             AtDeinit();
-            Model.Unload();
             isLifecycleInitialized = false;
+        }
+
+        public void CallDestroy()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallDestroy();
+            }
+
+            AtDestroy();
+            Model?.Unload();
         }
 
         private void InitializeParts()
@@ -139,13 +168,15 @@ namespace Akasha
             }
         }
 
-        protected virtual void AtSetModel() { }
+        protected virtual void AtEnable() { }
         protected virtual void AtAwake() { }
         protected virtual void AtStart() { }
         protected virtual void AtInit() { }
-        protected virtual void AtEnable() { }
-        protected virtual void AtDisable() { }
+        protected virtual void AtLoad() { }
+        protected virtual void AtReadyModel() { }
+        protected virtual void AtSave() { }
         protected virtual void AtDeinit() { }
+        protected virtual void AtDisable() { }
         protected virtual void AtDestroy() { }
         protected abstract void SetupModel();
     }

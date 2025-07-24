@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using System.Collections.Generic;
-using UnityEngine;
+
 namespace Akasha
 {
     public interface IController
@@ -25,7 +24,9 @@ namespace Akasha
         public bool IsFunctionalCaller => false;
 
         private readonly HashSet<RxBase> trackedRxVars = new();
-        private bool isLifecycleInitialized = false;
+        protected bool isLifecycleInitialized = false;
+
+        public bool IsLifecycleInitialized => isLifecycleInitialized;
 
         public void RegisterRx(RxBase rx)
         {
@@ -58,37 +59,39 @@ namespace Akasha
 
         protected virtual void OnEnable()
         {
-            AtEnable();
-            if (!isLifecycleInitialized)
-            {
-                CallInit();
-            }
-            LogDebug($"Controller {GetType().Name} enabled");
+            CallEnable();
         }
 
         protected virtual void OnDisable()
         {
-            AtDisable();
-            if (EnablePooling && isLifecycleInitialized)
-            {
-                CallDeinit();
-            }
-            LogDebug($"Controller {GetType().Name} disabled");
+            CallDisable();
         }
 
         protected override void OnDestroyed()
         {
-            if (isLifecycleInitialized)
-            {
-                CallDeinit();
-            }
-            AtDestroy();
-            Unload();
-            LogDebug($"Controller {GetType().Name} destroyed");
+            CallDestroy();
             base.OnDestroyed();
         }
 
-        private void CallInit()
+        protected virtual void CallEnable()
+        {
+            AtEnable();
+            if (!isLifecycleInitialized && IsInitialized)
+            {
+                CallInit();
+            }
+        }
+
+        protected virtual void CallDisable()
+        {
+            if (EnablePooling && isLifecycleInitialized)
+            {
+                CallDeinit();
+            }
+            AtDisable();
+        }
+
+        protected virtual void CallInit()
         {
             if (isLifecycleInitialized) return;
 
@@ -97,13 +100,24 @@ namespace Akasha
             LogDebug($"Controller {GetType().Name} lifecycle initialized");
         }
 
-        private void CallDeinit()
+        protected virtual void CallDeinit()
         {
             if (!isLifecycleInitialized) return;
 
             AtDeinit();
             isLifecycleInitialized = false;
             LogDebug($"Controller {GetType().Name} lifecycle deinitialized");
+        }
+
+        protected virtual void CallDestroy()
+        {
+            if (isLifecycleInitialized)
+            {
+                CallDeinit();
+            }
+            AtDestroy();
+            Unload();
+            LogDebug($"Controller {GetType().Name} destroyed");
         }
 
         protected override void OnInitialize()
@@ -129,12 +143,12 @@ namespace Akasha
             LogDebug($"Controller {GetType().Name} controller deinitialized");
         }
 
+        protected virtual void AtEnable() { }
         protected virtual void AtAwake() { }
         protected virtual void AtStart() { }
         protected virtual void AtInit() { }
-        protected virtual void AtEnable() { }
-        protected virtual void AtDisable() { }
         protected virtual void AtDeinit() { }
+        protected virtual void AtDisable() { }
         protected virtual void AtDestroy() { }
 
         protected void LogDebug(string message)
@@ -155,48 +169,145 @@ namespace Akasha
             Debug.LogError($"[{GetAggregateId()}] {message}");
         }
     }
-    public abstract class MController : ModelAggregate, IController, IModelOwner
+
+    public abstract class MController : BaseController, IModelOwner
     {
+        protected virtual bool EnableSaveLoad => false;
+
+        [SerializeField] protected bool isModelInitialized = false;
+        public bool isDirty = false;
+
         public override AggregateType GetAggregateType() => AggregateType.MController;
+
+        public new bool IsRxAllOwner => true;
+
+        public bool IsModelInitialized => isModelInitialized;
+        public bool IsLifecycleInitialized => isLifecycleInitialized;
+        public bool IsSaveLoadEnabled => EnableSaveLoad;
 
         public abstract BaseModel GetBaseModel();
 
-        protected override void OnInitialize()
+        protected override void OnAwake()
         {
-            base.OnInitialize();
-            OnControllerInitialize();
+            if (!isModelInitialized)
+            {
+                InitializeModel();
+            }
+            base.OnAwake();
         }
 
-        protected override void OnDeinitialize()
+        protected override void CallInit()
         {
-            OnControllerDeinitialize();
-            base.OnDeinitialize();
+            if (isLifecycleInitialized) return;
+
+            base.CallInit();
+
+            if (EnableSaveLoad)
+            {
+                CallLoad();
+            }
+
+            CallReadyModel();
         }
 
-        public virtual void OnControllerInitialize()
+        protected override void CallDeinit()
         {
-            LogDebug($"Model Controller {GetType().Name} initialized");
+            if (!isLifecycleInitialized) return;
+
+            if (EnableSaveLoad && isDirty)
+            {
+                CallSave();
+            }
+
+            base.CallDeinit();
         }
 
-        public virtual void OnControllerDeinitialize()
+        protected override void CallDestroy()
         {
-            LogDebug($"Model Controller {GetType().Name} deinitialized");
+            base.CallDestroy();
+
+            if (isModelInitialized)
+            {
+                DeinitializeModel();
+            }
         }
 
-        protected void LogDebug(string message)
+        protected virtual void CallLoad()
         {
-            Debug.Log($"[{GetAggregateId()}] {message}");
+            PerformLoad();
+            AtLoad();
         }
 
-        protected void LogWarning(string message)
+        protected virtual void CallReadyModel()
         {
-            Debug.LogWarning($"[{GetAggregateId()}] {message}");
+            AtReadyModel();
         }
 
-        protected void LogError(string message)
+        protected virtual void CallSave()
         {
-            Debug.LogError($"[{GetAggregateId()}] {message}");
+            AtSave();
+            PerformSave();
         }
+
+        protected virtual void InitializeModel()
+        {
+            SetupModel();
+            isModelInitialized = true;
+            OnModelInitialized();
+        }
+
+        protected virtual void DeinitializeModel()
+        {
+            OnModelDeinitializing();
+            CleanupModel();
+            isModelInitialized = false;
+        }
+
+        protected abstract void SetupModel();
+        protected virtual void CleanupModel() { }
+        protected virtual void OnModelInitialized() { }
+        protected virtual void OnModelDeinitializing() { }
+
+        protected virtual void AtLoad() { }
+        protected virtual void AtReadyModel() { }
+        protected virtual void AtSave() { }
+
+        protected void MarkDirty()
+        {
+            isDirty = true;
+            OnMarkDirty();
+        }
+
+        protected virtual void OnMarkDirty() { }
+
+        public virtual void Save()
+        {
+            if (!EnableSaveLoad) return;
+
+            CallSave();
+            isDirty = false;
+
+            if (GameManager.SaveLoad != null)
+            {
+                GameManager.SaveLoad.SaveGame();
+            }
+        }
+
+        public virtual void Load()
+        {
+            if (!EnableSaveLoad) return;
+
+            if (GameManager.SaveLoad != null)
+            {
+                GameManager.SaveLoad.LoadGame();
+            }
+
+            CallLoad();
+            isDirty = false;
+        }
+
+        protected virtual void PerformSave() { }
+        protected virtual void PerformLoad() { }
     }
 
     public abstract class MController<M> : MController, IModelOwner<M> where M : BaseModel
@@ -209,7 +320,7 @@ namespace Akasha
         protected override void SetupModel()
         {
             CreateModel();
-            AtSetModel();
+            SetModel();
         }
 
         protected override void CleanupModel()
@@ -219,7 +330,7 @@ namespace Akasha
         }
 
         protected abstract void CreateModel();
-        protected virtual void AtSetModel() { }
+        protected virtual void SetModel() { }
     }
 
     public abstract class EMController<E, M> : MController, IRxCaller
@@ -246,10 +357,22 @@ namespace Akasha
             base.OnAwake();
         }
 
+        protected override void CallEnable()
+        {
+            entity?.CallEnable();
+            base.CallEnable();
+        }
+
+        protected override void CallDisable()
+        {
+            entity?.CallDisable();
+            base.CallDisable();
+        }
+
         protected override void SetupModel()
         {
             entity?.CallAwake();
-            AtSetModel();
+            SetModel();
         }
 
         protected override void OnModelInitialized()
@@ -259,14 +382,36 @@ namespace Akasha
             base.OnModelInitialized();
         }
 
+        protected override void AtLoad()
+        {
+            entity?.CallLoad();
+            base.AtLoad();
+        }
+
+        protected override void AtReadyModel()
+        {
+            entity?.CallReadyModel();
+            base.AtReadyModel();
+        }
+
+        protected override void AtSave()
+        {
+            entity?.CallSave();
+            base.AtSave();
+        }
+
         protected override void OnModelDeinitializing()
         {
             entity?.CallDeinit();
-            entity?.CallDestroy();
             base.OnModelDeinitializing();
         }
 
-        protected virtual void AtSetModel() { }
+        protected override void CleanupModel()
+        {
+            entity?.CallDestroy();
+            base.CleanupModel();
+        }
+
+        protected virtual void SetModel() { }
     }
 }
-

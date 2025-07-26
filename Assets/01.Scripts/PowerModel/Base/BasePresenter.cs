@@ -18,6 +18,7 @@ namespace Akasha
 
         private readonly HashSet<RxBase> trackedRxVars = new();
         private readonly List<BaseView> ownedViews = new();
+        protected bool isLifecycleInitialized = false;
 
         public void RegisterRx(RxBase rx)
         {
@@ -31,6 +32,79 @@ namespace Akasha
                 rx.ClearRelation();
             }
             trackedRxVars.Clear();
+        }
+
+        protected override void OnAwake()
+        {
+            base.OnAwake();
+            AtAwake();
+        }
+
+        protected override void OnStart()
+        {
+            base.OnStart();
+            AtStart();
+            CallInit();
+        }
+
+        protected virtual void OnEnable()
+        {
+            CallEnable();
+        }
+
+        protected virtual void OnDisable()
+        {
+            CallDisable();
+        }
+
+        protected override void OnDestroyed()
+        {
+            CallDestroy();
+            base.OnDestroyed();
+        }
+
+        protected virtual void CallEnable()
+        {
+            AtEnable();
+            if (!isLifecycleInitialized && IsInitialized)
+            {
+                CallInit();
+            }
+        }
+
+        protected virtual void CallDisable()
+        {
+            if (isLifecycleInitialized)
+            {
+                CallDeinit();
+            }
+            AtDisable();
+        }
+
+        protected virtual void CallInit()
+        {
+            if (isLifecycleInitialized) return;
+
+            AtInit();
+            isLifecycleInitialized = true;
+        }
+
+        protected virtual void CallDeinit()
+        {
+            if (!isLifecycleInitialized) return;
+
+            AtDeinit();
+            isLifecycleInitialized = false;
+        }
+
+        protected virtual void CallDestroy()
+        {
+            if (isLifecycleInitialized)
+            {
+                CallDeinit();
+            }
+            AtDestroy();
+            Unload();
         }
 
         protected override void OnInitialize()
@@ -55,6 +129,14 @@ namespace Akasha
 
         protected virtual void OnPresenterInitialize() { }
         protected virtual void OnPresenterDeinitialize() { }
+
+        protected virtual void AtEnable() { }
+        protected virtual void AtAwake() { }
+        protected virtual void AtStart() { }
+        protected virtual void AtInit() { }
+        protected virtual void AtDeinit() { }
+        protected virtual void AtDisable() { }
+        protected virtual void AtDestroy() { }
 
         protected T CreateView<T>() where T : BaseView
         {

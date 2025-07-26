@@ -28,7 +28,7 @@ namespace Akasha
 
         public bool IsLifecycleInitialized => isLifecycleInitialized;
 
-        public void RegisterRx(RxBase rx)
+        public void RegisterRx(RxBase rx) 
         {
             trackedRxVars.Add(rx);
         }
@@ -170,6 +170,7 @@ namespace Akasha
         }
     }
 
+
     public abstract class MController : BaseController, IModelOwner
     {
         protected virtual bool EnableSaveLoad => false;
@@ -182,7 +183,6 @@ namespace Akasha
         public new bool IsRxAllOwner => true;
 
         public bool IsModelInitialized => isModelInitialized;
-        public bool IsLifecycleInitialized => isLifecycleInitialized;
         public bool IsSaveLoadEnabled => EnableSaveLoad;
 
         public abstract BaseModel GetBaseModel();
@@ -369,41 +369,45 @@ namespace Akasha
             base.CallDisable();
         }
 
+        protected override void CallInit()
+        {
+            if (isLifecycleInitialized) return;
+
+            entity?.CallInit();
+            base.CallInit();
+        }
+
+        protected override void CallDeinit()
+        {
+            if (!isLifecycleInitialized) return;
+
+            entity?.CallDeinit();
+            base.CallDeinit();
+        }
+
         protected override void SetupModel()
         {
             entity?.CallAwake();
+            entity?.CallStart();
             SetModel();
         }
 
-        protected override void OnModelInitialized()
-        {
-            entity?.CallStart();
-            entity?.CallInit();
-            base.OnModelInitialized();
-        }
-
-        protected override void AtLoad()
+        public override void CallLoad()
         {
             entity?.CallLoad();
-            base.AtLoad();
+            base.CallLoad();
         }
 
-        protected override void AtReadyModel()
+        public override void CallReadyModel()
         {
             entity?.CallReadyModel();
-            base.AtReadyModel();
+            base.CallReadyModel();
         }
 
-        protected override void AtSave()
+        public override void CallSave()
         {
             entity?.CallSave();
-            base.AtSave();
-        }
-
-        protected override void OnModelDeinitializing()
-        {
-            entity?.CallDeinit();
-            base.OnModelDeinitializing();
+            base.CallSave();
         }
 
         protected override void CleanupModel()

@@ -1,7 +1,6 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using System.Collections.Generic;
 using UnityEngine.SceneManagement;
+using UnityEngine;
 
 namespace Akasha
 {
@@ -35,7 +34,6 @@ namespace Akasha
 
         protected virtual void Awake()
         {
-            // GameManager가 초기화되기 전까지 대기
             if (GameManager.Instance == null || !GameManager.Instance.IsProjectInitialized)
             {
                 return;
@@ -52,54 +50,32 @@ namespace Akasha
                 managerAwakeCalled = true;
             }
         }
+
         protected virtual void OnDestroy()
         {
             OnManagerDestroy();
             Unload();
         }
 
-        protected virtual void OnManagerAwake()
-        {
-            // 하위 클래스에서 오버라이드
-        }
+        protected virtual void OnManagerAwake() { }
+        public virtual void OnSceneLoaded(Scene scene, LoadSceneMode mode) { }
+        public virtual void OnSceneUnloaded(Scene scene) { }
+        public virtual void OnActiveSceneChanged(Scene previousScene, Scene newScene) { }
+        protected virtual void OnManagerDestroy() { }
+        public virtual void OnApplicationFocusChanged(bool hasFocus) { }
+        public virtual void OnApplicationPauseChanged(bool pauseStatus) { }
 
-        public virtual void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            // 하위 클래스에서 오버라이드
-        }
-
-
-        public virtual void OnSceneUnloaded(Scene scene)
-        {
-            // 하위 클래스에서 오버라이드
-        }
-
-        public virtual void OnActiveSceneChanged(Scene previousScene, Scene newScene)
-        {
-            // 하위 클래스에서 오버라이드
-        }
-
-        protected virtual void OnManagerDestroy()
-        {
-            // 하위 클래스에서 오버라이드
-        }
-
-
-        public virtual void OnApplicationFocusChanged(bool hasFocus)
-        {
-            // 하위 클래스에서 오버라이드
-        }
-
-
-        public virtual void OnApplicationPauseChanged(bool pauseStatus)
-        {
-            // 하위 클래스에서 오버라이드
-        }
-
+        protected virtual void AtEnable() { }
+        protected virtual void AtAwake() { }
+        protected virtual void AtStart() { }
+        protected virtual void AtInit() { }
+        protected virtual void AtDeinit() { }
+        protected virtual void AtDisable() { }
+        protected virtual void AtDestroy() { }
 
 #if UNITY_EDITOR
         [Header("Debug Info")]
-        [SerializeField, TextArea(2, 5)] protected string debugInfo;  // private -> protected
+        [SerializeField, TextArea(2, 5)] protected string debugInfo;
 
         protected virtual void OnValidate()
         {
@@ -111,6 +87,5 @@ namespace Akasha
             }
         }
 #endif
-
     }
 }

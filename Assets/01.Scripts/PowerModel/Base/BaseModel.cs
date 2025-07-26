@@ -7,7 +7,7 @@ namespace Akasha
 {
     public interface IModifiableTarget
     {
-        IEnumerable<IModifiable> GetModifiables(); // 수정 가능한 필드 목록 반환
+        IEnumerable<IModifiable> GetModifiables();
     }
 
     public abstract class BaseModel : IModifiableTarget, IRxCaller, IRxOwner, ISaveable
@@ -22,7 +22,7 @@ namespace Akasha
         private readonly HashSet<RxBase> trackedRxVars = new();
         private readonly HashSet<IModifiable> modifiables = new();
 
-        public void RegisterRx(RxBase rx) // Rx 필드를 모델에 등록
+        public void RegisterRx(RxBase rx)
         {
             if (trackedRxVars.Add(rx))
             {
@@ -37,7 +37,7 @@ namespace Akasha
                 modifiables.Add(modifiable);
         }
 
-        public virtual IEnumerable<IModifiable> GetModifiables() => modifiables; // 수정 가능한 필드 목록 반환
+        public virtual IEnumerable<IModifiable> GetModifiables() => modifiables;
 
         public IEnumerable<RxBase> GetAllRxFields() => trackedRxVars;
 
@@ -50,6 +50,7 @@ namespace Akasha
             trackedRxVars.Clear();
             modifiables.Clear();
         }
+
         public virtual string GetSaveData()
         {
             var saveData = new Dictionary<string, object>();
@@ -114,5 +115,17 @@ namespace Akasha
             var convertedValue = Convert.ChangeType(value, valueType);
             setMethod?.Invoke(field, new[] { convertedValue });
         }
+
+        // 라이프사이클 메서드 추가
+        public virtual void AtEnable() { }
+        public virtual void AtAwake() { }
+        public virtual void AtStart() { }
+        public virtual void AtInit() { }
+        public virtual void AtLoad() { }
+        public virtual void AtReadyModel() { }
+        public virtual void AtSave() { }
+        public virtual void AtDeinit() { }
+        public virtual void AtDisable() { }
+        public virtual void AtDestroy() { }
     }
 }

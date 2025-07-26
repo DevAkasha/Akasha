@@ -30,41 +30,41 @@ namespace Akasha
             SetupModel();
             InitializeParts();
 
+            Model?.AtAwake();
             foreach (var part in allParts)
             {
                 part.CallAwake();
             }
-
             AtAwake();
         }
 
         public void CallStart()
         {
+            Model?.AtStart();
             foreach (var part in allParts)
             {
                 part.CallStart();
             }
-
             AtStart();
         }
 
         public void CallEnable()
         {
+            Model?.AtEnable();
             foreach (var part in allParts)
             {
                 part.CallEnable();
             }
-
             AtEnable();
         }
 
         public void CallDisable()
         {
+            Model?.AtDisable();
             foreach (var part in allParts)
             {
                 part.CallDisable();
             }
-
             AtDisable();
         }
 
@@ -72,42 +72,42 @@ namespace Akasha
         {
             if (isLifecycleInitialized) return;
 
+            Model?.AtInit();
             foreach (var part in allParts)
             {
                 part.CallInit();
             }
-
             AtInit();
             isLifecycleInitialized = true;
         }
 
         public void CallLoad()
         {
+            Model?.AtLoad();
             foreach (var part in allParts)
             {
                 part.CallLoad();
             }
-
             AtLoad();
         }
 
         public void CallReadyModel()
         {
+            Model?.AtReadyModel();
             foreach (var part in allParts)
             {
                 part.CallReadyModel();
             }
-
             AtReadyModel();
         }
 
         public void CallSave()
         {
+            Model?.AtSave();
             foreach (var part in allParts)
             {
                 part.CallSave();
             }
-
             AtSave();
         }
 
@@ -115,22 +115,22 @@ namespace Akasha
         {
             if (!isLifecycleInitialized) return;
 
+            Model?.AtDeinit();
             foreach (var part in allParts)
             {
                 part.CallDeinit();
             }
-
             AtDeinit();
             isLifecycleInitialized = false;
         }
 
         public void CallDestroy()
         {
+            Model?.AtDestroy();
             foreach (var part in allParts)
             {
                 part.CallDestroy();
             }
-
             AtDestroy();
             Model?.Unload();
         }

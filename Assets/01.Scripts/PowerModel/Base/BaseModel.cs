@@ -10,7 +10,7 @@ namespace Akasha
         IEnumerable<IModifiable> GetModifiables();
     }
 
-    public abstract class BaseModel : IModifiableTarget, IRxCaller, IRxOwner, ISaveable
+    public abstract class BaseModel : IModifiableTarget, IRxCaller, IRxOwner
     {
         bool IRxCaller.IsLogicalCaller => true;
         bool IRxCaller.IsMultiRolesCaller => true;

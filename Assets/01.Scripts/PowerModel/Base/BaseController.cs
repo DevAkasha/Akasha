@@ -1,34 +1,107 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Akasha
 {
-    public interface IController
+    public abstract class BaseController : AggregateRoot
     {
-        void OnControllerInitialize();
-        void OnControllerDeinitialize();
+
+
     }
 
-    public abstract class BaseController : AggregateRoot, IController, IRxOwner, IRxCaller
+    public abstract class Controller : BaseController, IRxOwner, IRxCaller
     {
-        [Header("Controller Settings")]
-        [SerializeField] protected bool enableDebugLogs = false;
-        protected virtual bool EnablePooling => false;
-
-        public override AggregateType GetAggregateType() => AggregateType.Controller;
-
-        public bool IsRxVarOwner => true;
-        public bool IsRxAllOwner => false;
-        public bool IsLogicalCaller => true;
-        public bool IsMultiRolesCaller => true;
-        public bool IsFunctionalCaller => false;
+        public bool isInit = false;
+        public bool isPoolObject = false;
+        public bool isPoolInit = false;
 
         private readonly HashSet<RxBase> trackedRxVars = new();
-        protected bool isLifecycleInitialized = false;
 
-        public bool IsLifecycleInitialized => isLifecycleInitialized;
+        public bool IsRxVarOwner => true;
 
-        public void RegisterRx(RxBase rx) 
+        public bool IsRxAllOwner => false;
+
+        public bool IsLogicalCaller => true;
+
+        public bool IsMultiRolesCaller => true;
+
+        public bool IsFunctionalCaller => false;
+        public override AggregateType GetAggregateType()
+        {
+            return AggregateType.Controller;
+        }
+        protected override void Awake()
+        {
+            base.Awake();
+            AtAwake();
+        }
+
+        private void OnEnable()
+        {
+            if (!isInit) return;
+            if (isPoolObject)
+            {
+                OnPoolInit();
+                AtPoolInit();
+            }
+            else
+            {
+                AtEnable();
+            }          
+        }
+
+        private void OnPoolInit()
+        {
+            isPoolInit = true;
+        }
+
+        protected void Start()
+        {
+            OnInit();
+            AtInit();
+            AtStart();
+            OnEnable();
+            AtLateStart();
+        }
+
+        private void OnInit()
+        {
+            isInit = true;           
+        }     
+
+        protected void OnDisable()
+        {
+            if (!isPoolObject)
+            {
+                AtDisable();
+            }
+            else if(isPoolInit)
+            {
+                OnPoolDeinit();
+                AtPoolDeinit();
+            }
+        }
+
+        private void OnPoolDeinit()
+        {
+            isPoolInit = false;
+        }
+
+        protected override void OnDestroy()
+        {
+            OnDeinit();
+            AtDeinit();
+            AtDestroy();
+        }
+
+        private void OnDeinit()
+        {
+            isInit = false;
+            Unload();
+        }
+
+        public void RegisterRx(RxBase rx)
         {
             trackedRxVars.Add(rx);
         }
@@ -42,306 +115,170 @@ namespace Akasha
             trackedRxVars.Clear();
         }
 
-        protected override void OnAwake()
-        {
-            base.OnAwake();
-            AtAwake();
-            LogDebug($"Controller {GetType().Name} awakened");
-        }
-
-        protected override void OnStart()
-        {
-            base.OnStart();
-            AtStart();
-            CallInit();
-            LogDebug($"Controller {GetType().Name} started");
-        }
-
-        protected virtual void OnEnable()
-        {
-            CallEnable();
-        }
-
-        protected virtual void OnDisable()
-        {
-            CallDisable();
-        }
-
-        protected override void OnDestroyed()
-        {
-            CallDestroy();
-            base.OnDestroyed();
-        }
-
-        protected virtual void CallEnable()
-        {
-            AtEnable();
-            if (!isLifecycleInitialized && IsInitialized)
-            {
-                CallInit();
-            }
-        }
-
-        protected virtual void CallDisable()
-        {
-            if (EnablePooling && isLifecycleInitialized)
-            {
-                CallDeinit();
-            }
-            AtDisable();
-        }
-
-        protected virtual void CallInit()
-        {
-            if (isLifecycleInitialized) return;
-
-            AtInit();
-            isLifecycleInitialized = true;
-            LogDebug($"Controller {GetType().Name} lifecycle initialized");
-        }
-
-        protected virtual void CallDeinit()
-        {
-            if (!isLifecycleInitialized) return;
-
-            AtDeinit();
-            isLifecycleInitialized = false;
-            LogDebug($"Controller {GetType().Name} lifecycle deinitialized");
-        }
-
-        protected virtual void CallDestroy()
-        {
-            if (isLifecycleInitialized)
-            {
-                CallDeinit();
-            }
-            AtDestroy();
-            Unload();
-            LogDebug($"Controller {GetType().Name} destroyed");
-        }
-
-        protected override void OnInitialize()
-        {
-            base.OnInitialize();
-            OnControllerInitialize();
-        }
-
-        protected override void OnDeinitialize()
-        {
-            OnControllerDeinitialize();
-            Unload();
-            base.OnDeinitialize();
-        }
-
-        public virtual void OnControllerInitialize()
-        {
-            LogDebug($"Controller {GetType().Name} controller initialized");
-        }
-
-        public virtual void OnControllerDeinitialize()
-        {
-            LogDebug($"Controller {GetType().Name} controller deinitialized");
-        }
-
-        protected virtual void AtEnable() { }
         protected virtual void AtAwake() { }
-        protected virtual void AtStart() { }
+
         protected virtual void AtInit() { }
         protected virtual void AtDeinit() { }
+
+        protected virtual void AtStart() { }
+        protected virtual void AtLateStart() { }
+
+        protected virtual void AtEnable() { }
         protected virtual void AtDisable() { }
+
+        protected virtual void AtPoolInit() { }
+        protected virtual void AtPoolDeinit() { }
+
         protected virtual void AtDestroy() { }
-
-        protected void LogDebug(string message)
-        {
-            if (enableDebugLogs)
-            {
-                Debug.Log($"[{GetAggregateId()}] {message}");
-            }
-        }
-
-        protected void LogWarning(string message)
-        {
-            Debug.LogWarning($"[{GetAggregateId()}] {message}");
-        }
-
-        protected void LogError(string message)
-        {
-            Debug.LogError($"[{GetAggregateId()}] {message}");
-        }
     }
-
 
     public abstract class MController : BaseController, IModelOwner
     {
-        protected virtual bool EnableSaveLoad => false;
-
-        [SerializeField] protected bool isModelInitialized = false;
-        public bool isDirty = false;
-
-        public override AggregateType GetAggregateType() => AggregateType.MController;
-
-        public new bool IsRxAllOwner => true;
-
-        public bool IsModelInitialized => isModelInitialized;
-        public bool IsSaveLoadEnabled => EnableSaveLoad;
-
         public abstract BaseModel GetBaseModel();
-
-        protected override void OnAwake()
-        {
-            if (!isModelInitialized)
-            {
-                InitializeModel();
-            }
-            base.OnAwake();
-        }
-
-        protected override void CallInit()
-        {
-            if (isLifecycleInitialized) return;
-
-            base.CallInit();
-
-            if (EnableSaveLoad)
-            {
-                CallLoad();
-            }
-
-            CallReadyModel();
-        }
-
-        protected override void CallDeinit()
-        {
-            if (!isLifecycleInitialized) return;
-
-            if (EnableSaveLoad && isDirty)
-            {
-                CallSave();
-            }
-
-            base.CallDeinit();
-        }
-
-        protected override void CallDestroy()
-        {
-            base.CallDestroy();
-
-            if (isModelInitialized)
-            {
-                DeinitializeModel();
-            }
-        }
-
-        public virtual void CallLoad()
-        {
-            PerformLoad();
-            AtLoad();
-        }
-
-        public virtual void CallReadyModel()
-        {
-            AtReadyModel();
-        }
-
-        public virtual void CallSave()
-        {
-            AtSave();
-            PerformSave();
-        }
-
-        protected virtual void InitializeModel()
-        {
-            SetupModel();
-            isModelInitialized = true;
-            OnModelInitialized();
-        }
-
-        protected virtual void DeinitializeModel()
-        {
-            OnModelDeinitializing();
-            CleanupModel();
-            isModelInitialized = false;
-        }
-
-        protected abstract void SetupModel();
-        protected virtual void CleanupModel() { }
-        protected virtual void OnModelInitialized() { }
-        protected virtual void OnModelDeinitializing() { }
-
-        protected virtual void AtLoad() { }
-        protected virtual void AtReadyModel() { }
-        protected virtual void AtSave() { }
-
-        public void MarkDirty()
-        {
-            isDirty = true;
-            OnMarkDirty();
-        }
-
-        protected virtual void OnMarkDirty() { }
-
-        public virtual void Save()
-        {
-            if (!EnableSaveLoad) return;
-
-            CallSave();
-            isDirty = false;
-
-            if (GameManager.SaveLoad != null)
-            {
-                GameManager.SaveLoad.SaveGame();
-            }
-        }
-
-        public virtual void Load()
-        {
-            if (!EnableSaveLoad) return;
-
-            if (GameManager.SaveLoad != null)
-            {
-                GameManager.SaveLoad.LoadGame();
-            }
-
-            CallLoad();
-            isDirty = false;
-        }
-
-        protected virtual void PerformSave() { }
-        protected virtual void PerformLoad() { }
     }
 
-    public abstract class MController<M> : MController, IModelOwner<M> where M : BaseModel
+    public abstract class MController<M> : MController, IModelOwner<M>, IRxCaller where M : BaseModel
     {
         public M Model { get; set; }
 
         public override BaseModel GetBaseModel() => Model;
+
         public M GetModel() => Model;
 
-        protected override void SetupModel()
+        public bool isInit = false;
+        public bool isPoolObject = false;
+        public bool isPoolInit = false;
+
+        public bool IsLogicalCaller => true;
+
+        public bool IsMultiRolesCaller => false;
+
+        public bool IsFunctionalCaller => true;
+        public override AggregateType GetAggregateType()
         {
-            CreateModel();
-            SetModel();
+            return AggregateType.MController;
+        }
+        protected override void Awake()
+        {
+            base.Awake();
+            AtAwake();
+            Model = SetModel();
+            AtModelReady();
         }
 
-        protected override void CleanupModel()
+        private void OnEnable()
         {
-            Model?.Unload();
-            Model = null;
+            if (!isInit) return;
+            if (isPoolObject)
+            {
+                OnPoolInit();
+                AtPoolInit();
+            }
+            else
+            {
+                AtEnable();
+            }
         }
 
-        protected abstract void CreateModel();
-        protected virtual void SetModel() { }
+        protected void Start()
+        {
+            OnInit();
+            AtInit();
+            AtStart();
+            OnEnable();
+            AtLateStart();
+        }
+
+        private void OnPoolInit()
+        {
+            isPoolInit = true;
+        }
+
+        private void OnInit()
+        {
+            isInit = true;
+        }
+
+        protected void OnDisable()
+        {
+            if (!isPoolObject)
+            {
+                AtDisable();
+            }
+            else if(isPoolInit)
+            {
+                OnPoolDeinit();
+                AtPoolDeinit();
+            }
+        }
+
+        private void OnPoolDeinit()
+        {
+            isPoolInit = false;
+        }
+
+        protected override void OnDestroy()
+        {
+            OnDeinit();
+            AtDeinit();
+            AtDestroy();
+        }
+
+        private void OnDeinit()
+        {
+            isInit = false;
+        }
+        
+        public void CallSave()
+        {
+            AtSave();
+        }
+
+        public void CallLoad()
+        {
+            AtLoad();
+        }
+
+        protected virtual void AtAwake() { }
+
+        protected virtual void AtInit() { }
+        protected virtual void AtDeinit() { }
+
+        protected virtual void AtStart() { }
+        protected virtual void AtLateStart() { }
+
+        protected virtual void AtEnable() { }
+        protected virtual void AtDisable() { }
+
+        protected virtual void AtDestroy() { }
+
+        protected virtual void AtPoolInit() { }
+        protected virtual void AtPoolDeinit() { }
+
+        protected abstract M SetModel();
+        protected virtual void AtModelReady() { }
+        protected virtual void AtSave() { }
+        protected virtual void AtLoad() { }
+        
+    }
+    public abstract class EMController : BaseController, IModelOwner
+    {
+        public abstract BaseModel GetBaseModel();
+        public abstract void RegistEntity(BaseEntity baseEntity);
+        public abstract void CallModelReady();
     }
 
-    public abstract class EMController<E, M> : MController, IRxCaller
+    public abstract class EMController<E, M> : EMController, IRxCaller
         where E : BaseEntity<M> where M : BaseModel
     {
-        public override AggregateType GetAggregateType() => AggregateType.EMController;
+        public E Entity { get; set; }
+        public M Model { get; set; }
 
-        [SerializeField] private E entity;
+        public bool isInit = false;
 
-        public E Entity => entity;
-        public M Model => entity?.Model;
+        protected bool isPoolObject = false;
+
+        public bool isPoolInit = false;
 
         bool IRxCaller.IsLogicalCaller => true;
         bool IRxCaller.IsMultiRolesCaller => false;
@@ -349,73 +286,135 @@ namespace Akasha
 
         public override BaseModel GetBaseModel() => Model;
         public M GetModel() => Model;
-
-        protected override void OnAwake()
+        public override AggregateType GetAggregateType()
         {
-            if (entity == null)
-                entity = GetComponentInChildren<E>();
-            base.OnAwake();
+            return AggregateType.EMController;
+        }
+        public override void RegistEntity(BaseEntity entity)
+        {
+            try
+            {
+                Entity = (E)entity;
+            }
+            catch (InvalidCastException ex)
+            {
+                Debug.LogError($"EntityRegist failed: Cannot cast {entity.GetType().Name} to {typeof(E).Name}. " +
+                              $"Entity: {entity}, Expected: {typeof(E)}");
+            }
         }
 
-        protected override void CallEnable()
+        public override void CallModelReady()
         {
-            entity?.CallEnable();
-            base.CallEnable();
+            Model = Entity.Model;
+            AtModelReady();
         }
 
-        protected override void CallDisable()
+        protected override void Awake()
         {
-            entity?.CallDisable();
-            base.CallDisable();
+            base.Awake();
+            AtAwake();
         }
 
-        protected override void CallInit()
+        private void OnEnable()
         {
-            if (isLifecycleInitialized) return;
-
-            entity?.CallInit();
-            base.CallInit();
+            if (!isInit) return;
+            if (isPoolObject)
+            {
+                Entity.CallPoolInit();
+                OnPoolInit();
+                AtPoolInit();
+            }
+            else
+            {
+                Entity.CallEnable();
+                AtEnable();
+            }
         }
 
-        protected override void CallDeinit()
+        private void OnPoolInit()
         {
-            if (!isLifecycleInitialized) return;
-
-            entity?.CallDeinit();
-            base.CallDeinit();
+            isPoolInit = true;
         }
 
-        protected override void SetupModel()
+        protected void Start()
         {
-            entity?.CallAwake();
-            entity?.CallStart();
-            SetModel();
+            Entity.SetEnable();
+            Entity.CallInit();
+            OnInit();
+            AtInit();
+            Entity.CallStart();
+            AtStart();
+            OnEnable();
+            Entity.CallLateStart();
+            AtLateStart();     
         }
 
-        public override void CallLoad()
+        private void OnInit()
         {
-            entity?.CallLoad();
-            base.CallLoad();
+            isInit = true;
         }
 
-        public override void CallReadyModel()
+        protected void OnDisable()
         {
-            entity?.CallReadyModel();
-            base.CallReadyModel();
+            if (!isInit) return;
+            if (!isPoolObject)
+            {
+                Entity.CallDisable();
+                AtDisable();
+            }
+            else if (isPoolInit)
+            {
+                Entity.CallPoolDeinit();
+                OnPoolDeinit();
+                AtPoolDeinit();
+            }            
         }
 
-        public override void CallSave()
+        private void OnPoolDeinit()
         {
-            entity?.CallSave();
-            base.CallSave();
+            isPoolInit = false;
         }
 
-        protected override void CleanupModel()
+        protected override void OnDestroy()
         {
-            entity?.CallDestroy();
-            base.CleanupModel();
+            Entity.CallDeinit();
+            OnDeinit();
+            AtDeinit();
+            Entity.CallDestroy();
+            AtDestroy();
         }
 
-        protected virtual void SetModel() { }
+        private void OnDeinit()
+        {
+            isInit = false;   
+        }
+
+        public void OnSave()
+        {
+            AtSave();
+        }
+
+        public void OnLoad()
+        {
+            AtLoad();
+        }
+
+        protected virtual void AtAwake() { }
+
+        protected virtual void AtInit() { }
+        protected virtual void AtStart() { }
+        protected virtual void AtLateStart() { }
+        protected virtual void AtEnable() { }
+
+        protected virtual void AtDisable() { }
+        protected virtual void AtDeinit() { }
+        protected virtual void AtDestroy() { }
+
+        protected virtual void AtPoolInit() { }
+        protected virtual void AtPoolDeinit() { }
+
+        protected virtual void AtModelReady() { }
+        protected virtual void AtSave() { }
+        protected virtual void AtLoad() { }
     }
 }

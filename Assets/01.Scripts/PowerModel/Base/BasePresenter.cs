@@ -34,18 +34,7 @@ namespace Akasha
             trackedRxVars.Clear();
         }
 
-        protected override void OnAwake()
-        {
-            base.OnAwake();
-            AtAwake();
-        }
 
-        protected override void OnStart()
-        {
-            base.OnStart();
-            AtStart();
-            CallInit();
-        }
 
         protected virtual void OnEnable()
         {
@@ -57,11 +46,6 @@ namespace Akasha
             CallDisable();
         }
 
-        protected override void OnDestroyed()
-        {
-            CallDestroy();
-            base.OnDestroyed();
-        }
 
         protected virtual void CallEnable()
         {
@@ -105,26 +89,6 @@ namespace Akasha
             }
             AtDestroy();
             Unload();
-        }
-
-        protected override void OnInitialize()
-        {
-            base.OnInitialize();
-            OnPresenterInitialize();
-        }
-
-        protected override void OnDeinitialize()
-        {
-            foreach (var view in ownedViews)
-            {
-                if (view != null)
-                    view.Cleanup();
-            }
-            ownedViews.Clear();
-
-            Unload();
-            OnPresenterDeinitialize();
-            base.OnDeinitialize();
         }
 
         protected virtual void OnPresenterInitialize() { }

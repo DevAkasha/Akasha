@@ -11,7 +11,6 @@ namespace Akasha
     {
         [Header("Core Manager References")]
         [SerializeField] private ControllerManager controllerManager;
-        [SerializeField] private ModelControllerManager modelControllerManager;
         [SerializeField] private PresenterManager presenterManager;
 
         private readonly List<ManagerBase> allManagers = new();
@@ -19,7 +18,6 @@ namespace Akasha
         private bool isProjectInitialized = false;
 
         public static ControllerManager Controllers => Instance?.controllerManager;
-        public static ModelControllerManager ModelControllers => Instance?.modelControllerManager;
         public static PresenterManager Presenters => Instance?.presenterManager;
 
         public bool IsProjectInitialized => isProjectInitialized;
@@ -93,14 +91,10 @@ namespace Akasha
             allManagers.AddRange(managers);
 
             var controllerMgr = FindObjectOfType<ControllerManager>(true);
-            var modelControllerMgr = FindObjectOfType<ModelControllerManager>(true);
             var presenterMgr = FindObjectOfType<PresenterManager>(true);
 
             if (controllerMgr != null && !allManagers.Contains(controllerMgr))
                 allManagers.Add(controllerMgr);
-
-            if (modelControllerMgr != null && !allManagers.Contains(modelControllerMgr))
-                allManagers.Add(modelControllerMgr);
 
             if (presenterMgr != null && !allManagers.Contains(presenterMgr))
                 allManagers.Add(presenterMgr);
@@ -123,7 +117,6 @@ namespace Akasha
             }
 
             controllerManager = controllerMgr;
-            modelControllerManager = modelControllerMgr;
             presenterManager = presenterMgr;
 
             isInitialized = true;
@@ -152,31 +145,16 @@ namespace Akasha
             return allManagers.FirstOrDefault(m => m is T) as T;
         }
 
-        public T GetController<T>() where T : BaseController
+        public T GetController<T>() where T : EMController
         {
             return Controllers?.GetController<T>();
         }
 
-        public T GetModelController<T>() where T : MController
-        {
-            return ModelControllers?.GetModelController<T>();
-        }
+
 
         public T GetPresenter<T>() where T : BasePresenter
         {
             return Presenters?.GetPresenter<T>();
-        }
-
-        public void SaveAllModels()
-        {
-            ModelControllers?.SaveAllModels();
-            Debug.Log("[GameManager] Saved all models");
-        }
-
-        public void LoadAllModels()
-        {
-            ModelControllers?.LoadAllModels();
-            Debug.Log("[GameManager] Loaded all models");
         }
 
         public void ShowAllPresenters()
@@ -189,32 +167,6 @@ namespace Akasha
         {
             Presenters?.HideAll();
             Debug.Log("[GameManager] Hid all presenters");
-        }
-
-        public void InitializeAllControllers()
-        {
-            Controllers?.InitializeAll();
-            ModelControllers?.InitializeAll();
-            Debug.Log("[GameManager] Initialized all controllers");
-        }
-
-        public void DeinitializeAllControllers()
-        {
-            Controllers?.DeinitializeAll();
-            ModelControllers?.DeinitializeAll();
-            Debug.Log("[GameManager] Deinitialized all controllers");
-        }
-
-        public void InitializeAllPresenters()
-        {
-            Presenters?.InitializeAll();
-            Debug.Log("[GameManager] Initialized all presenters");
-        }
-
-        public void DeinitializeAllPresenters()
-        {
-            Presenters?.DeinitializeAll();
-            Debug.Log("[GameManager] Deinitialized all presenters");
         }
 
         private void RegisterSceneEvents()
@@ -277,12 +229,6 @@ namespace Akasha
                 stats["Pooled Controllers"] = Controllers.PooledCount;
             }
 
-            if (ModelControllers != null)
-            {
-                stats["Model Controllers"] = ModelControllers.RegisteredCount;
-                stats["Pooled Model Controllers"] = ModelControllers.PooledCount;
-            }
-
             if (Presenters != null)
             {
                 stats["Presenters"] = Presenters.RegisteredCount;
@@ -314,19 +260,19 @@ namespace Akasha
         [SerializeField] private EffectManager effectManager;
         [SerializeField] private EffectRunner effectRunner;
         [SerializeField] private ModifierManager modifierManager;
-        [SerializeField] private SaveLoadManager saveLoadManager;
+    
 
         public static EffectManager Effect => Instance?.effectManager;
         public static EffectRunner EffectRunner => Instance?.effectRunner;
         public static ModifierManager Modifier => Instance?.modifierManager;
-        public static SaveLoadManager SaveLoad => Instance?.saveLoadManager;
+
 
         partial void InitializeProject()
         {
             effectManager = GetManager<EffectManager>();
             effectRunner = GetManager<EffectRunner>();
             modifierManager = GetManager<ModifierManager>();
-            saveLoadManager = GetManager<SaveLoadManager>();
+ 
 
             if (modifierManager == null)
             {
@@ -353,15 +299,6 @@ namespace Akasha
             else
             {
                 Debug.Log("[GameManager] EffectRunner successfully initialized");
-            }
-
-            if (saveLoadManager == null)
-            {
-                Debug.LogError("[GameManager] SaveLoadManager not found! Please add SaveLoadManager component to the scene.");
-            }
-            else
-            {
-                Debug.Log("[GameManager] SaveLoadManager successfully initialized");
             }
 
             isProjectInitialized = true;

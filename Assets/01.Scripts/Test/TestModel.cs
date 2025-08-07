@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Akasha;
 using UnityEngine;
 
-public class LifeModel : BaseModel
+public class TestModel : BaseModel
 {
 
 }

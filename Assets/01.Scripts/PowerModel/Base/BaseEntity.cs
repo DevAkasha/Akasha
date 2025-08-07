@@ -8,7 +8,7 @@ namespace Akasha
     public abstract class BaseEntity : MonoBehaviour, IModelOwner, IRxCaller
     {
         public bool IsLogicalCaller => true;
-        public bool IsMultiRolesCaller => true;
+        public bool IsMultiRolesCaller => false;
         public bool IsFunctionalCaller => true;
 
         public abstract BaseModel GetBaseModel();
@@ -18,121 +18,39 @@ namespace Akasha
     {
         private readonly Dictionary<Type, BasePart> partsByType = new();
         private readonly List<BasePart> allParts = new();
-        private bool isLifecycleInitialized = false;
+        
+        protected bool isInit = false;
+        private EMController controller;
 
         public M Model { get; set; }
 
         public override BaseModel GetBaseModel() => Model;
         public M GetModel() => Model;
 
-        public void CallAwake()
+        private void Awake()
         {
-            SetupModel();
-            InitializeParts();
-
-            Model?.AtAwake();
-            foreach (var part in allParts)
-            {
-                part.CallAwake();
-            }
+            enabled = false;
+            controller = GetComponentInParent<EMController>();
+            controller.RegistEntity(this);
             AtAwake();
         }
 
-        public void CallStart()
+        public void SetEnable()
         {
-            Model?.AtStart();
-            foreach (var part in allParts)
-            {
-                part.CallStart();
-            }
-            AtStart();
-        }
-
-        public void CallEnable()
-        {
-            Model?.AtEnable();
-            foreach (var part in allParts)
-            {
-                part.CallEnable();
-            }
-            AtEnable();
-        }
-
-        public void CallDisable()
-        {
-            Model?.AtDisable();
-            foreach (var part in allParts)
-            {
-                part.CallDisable();
-            }
-            AtDisable();
+            enabled = true;
+            Model = SetupModel();
+            InitializeParts();
+            AtModelReady();
+            controller.CallModelReady();
         }
 
         public void CallInit()
         {
-            if (isLifecycleInitialized) return;
-
-            Model?.AtInit();
             foreach (var part in allParts)
             {
                 part.CallInit();
             }
             AtInit();
-            isLifecycleInitialized = true;
-        }
-
-        public void CallLoad()
-        {
-            Model?.AtLoad();
-            foreach (var part in allParts)
-            {
-                part.CallLoad();
-            }
-            AtLoad();
-        }
-
-        public void CallReadyModel()
-        {
-            Model?.AtReadyModel();
-            foreach (var part in allParts)
-            {
-                part.CallReadyModel();
-            }
-            AtReadyModel();
-        }
-
-        public void CallSave()
-        {
-            Model?.AtSave();
-            foreach (var part in allParts)
-            {
-                part.CallSave();
-            }
-            AtSave();
-        }
-
-        public void CallDeinit()
-        {
-            if (!isLifecycleInitialized) return;
-
-            Model?.AtDeinit();
-            foreach (var part in allParts)
-            {
-                part.CallDeinit();
-            }
-            AtDeinit();
-            isLifecycleInitialized = false;
-        }
-
-        public void CallDestroy()
-        {
-            Model?.AtDestroy();
-            foreach (var part in allParts)
-            {
-                part.CallDestroy();
-            }
-            AtDestroy();
-            Model?.Unload();
         }
 
         private void InitializeParts()
@@ -143,9 +61,99 @@ namespace Akasha
                 allParts.Add(part);
                 partsByType[part.GetType()] = part;
 
+                part.enabled = true;
                 part.RegistEntity(this);
-                part.RegistModel(Model);
             }
+        }
+
+        public void CallStart()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallStart();
+            }
+            AtStart();
+        }
+
+        public void CallLateStart()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallLateStart();
+            }
+            AtLateStart();
+        }
+
+        public void CallPoolInit()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallPoolInit();
+            }
+            AtPoolInit();
+        }
+
+        public void CallEnable()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallEnable();
+            }
+            AtEnable();
+        }
+
+        public void CallPoolDeinit()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallPoolDeinit();
+            }
+            AtPoolDeinit();
+        }
+
+        public void CallDisable()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallDisable();
+            }
+            AtDisable();
+        }
+
+        public void CallSave()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallSave();
+            }
+            AtSave();
+        }
+
+        public void CallLoad()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallLoad();
+            }
+            AtLoad();
+        }
+
+        public void CallDeinit()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallDeinit();
+            }
+            AtDeinit();
+        }
+
+        public void CallDestroy()
+        {
+            foreach (var part in allParts)
+            {
+                part.CallDestroy();
+            }
+            AtDestroy();
         }
 
         public T GetPart<T>() where T : BasePart
@@ -168,16 +176,23 @@ namespace Akasha
             }
         }
 
-        protected virtual void AtEnable() { }
         protected virtual void AtAwake() { }
-        protected virtual void AtStart() { }
+        protected virtual void AtEnable() { }
         protected virtual void AtInit() { }
+        protected virtual void AtStart() { }
+        protected virtual void AtLateStart() { }
+
+        protected virtual void AtPoolInit() { }
+        protected virtual void AtPoolDeinit() { }
+
+        protected virtual void AtModelReady() { }
         protected virtual void AtLoad() { }
-        protected virtual void AtReadyModel() { }
         protected virtual void AtSave() { }
+
         protected virtual void AtDeinit() { }
         protected virtual void AtDisable() { }
         protected virtual void AtDestroy() { }
-        protected abstract void SetupModel();
+
+        protected abstract M SetupModel();
     }
 }

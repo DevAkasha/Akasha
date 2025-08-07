@@ -25,7 +25,6 @@ namespace Akasha
 
         protected override void OnManagerDestroy()
         {
-            DeinitializeAll();
             ClearPool();
             registeredAggregates.Clear();
         }
@@ -137,24 +136,6 @@ namespace Akasha
                 SetActive(aggregate, active);
             }
             Log($"Set all aggregates active: {active}");
-        }
-
-        public void InitializeAll()
-        {
-            foreach (var aggregate in registeredAggregates.Values.Where(a => !a.IsInitialized))
-            {
-                aggregate.PerformInitialization();
-            }
-            Log("Initialized all aggregates");
-        }
-
-        public void DeinitializeAll()
-        {
-            foreach (var aggregate in registeredAggregates.Values.Where(a => a.IsInitialized))
-            {
-                aggregate.PerformDeinitialization();
-            }
-            Log("Deinitialized all aggregates");
         }
 
         public void ClearPool()

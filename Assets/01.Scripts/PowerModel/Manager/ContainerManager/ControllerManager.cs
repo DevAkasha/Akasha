@@ -6,26 +6,26 @@ using UnityEngine;
 namespace Akasha
 {
 
-    public class ControllerManager : ContainerManager<BaseController>
+    public class ControllerManager : ContainerManager<EMController>
     {
         public override int InitializationPriority => 80;
 
-        protected override void OnAggregateRegistered(BaseController controller)
+        protected override void OnAggregateRegistered(EMController controller)
         {
             Debug.Log($"[ControllerManager] Registered BaseController: {controller.GetType().Name}");
         }
 
-        protected override void OnAggregateUnregistered(BaseController controller)
+        protected override void OnAggregateUnregistered(EMController controller)
         {
             Debug.Log($"[ControllerManager] Unregistered BaseController: {controller.GetType().Name}");
         }
 
-        public IEnumerable<BaseController> GetControllersByType<T>() where T : BaseController
+        public IEnumerable<EMController> GetControllersByType<T>() where T : EMController
         {
             return GetAll().OfType<T>();
         }
 
-        public T GetController<T>() where T : BaseController
+        public T GetController<T>() where T : EMController
         {
             return GetAll().OfType<T>().FirstOrDefault();
         }

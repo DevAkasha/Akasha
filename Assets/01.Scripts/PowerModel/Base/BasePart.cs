@@ -1,80 +1,22 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 namespace Akasha
 {
     public abstract class BasePart : MonoBehaviour
     {
-        private bool isLifecycleInitialized = false;
-
-        public void CallAwake()
-        {
-            AtAwake();
-        }
-
-        public void CallStart()
-        {
-            AtStart();
-        }
-
-        public void CallEnable()
-        {
-            AtEnable();
-        }
-
-        public void CallDisable()
-        {
-            AtDisable();
-        }
-
-        public void CallInit()
-        {
-            if (isLifecycleInitialized) return;
-
-            AtInit();
-            isLifecycleInitialized = true;
-        }
-
-        public void CallLoad()
-        {
-            AtLoad();
-        }
-
-        public void CallReadyModel()
-        {
-            AtReadyModel();
-        }
-
-        public void CallSave()
-        {
-            AtSave();
-        }
-
-        public void CallDeinit()
-        {
-            if (!isLifecycleInitialized) return;
-
-            AtDeinit();
-            isLifecycleInitialized = false;
-        }
-
-        public void CallDestroy()
-        {
-            AtDestroy();
-        }
-
-        protected virtual void AtEnable() { }
-        protected virtual void AtAwake() { }
-        protected virtual void AtStart() { }
-        protected virtual void AtInit() { }
-        protected virtual void AtLoad() { }
-        protected virtual void AtReadyModel() { }
-        protected virtual void AtSave() { }
-        protected virtual void AtDeinit() { }
-        protected virtual void AtDisable() { }
-        protected virtual void AtDestroy() { }
-
-        public abstract void RegistEntity(object entity);
-        public abstract void RegistModel(object model);
+        public abstract void RegistEntity(BaseEntity entity);
+        public abstract void CallInit();
+        public abstract void CallStart();
+        public abstract void CallEnable();
+        public abstract void CallPoolInit(); 
+        public abstract void CallPoolDeinit();
+        public abstract void CallLateStart();
+        public abstract void CallDisable();
+        public abstract void CallDeinit();
+        public abstract void CallDestroy();
+        public abstract void CallSave();
+        public abstract void CallLoad();
     }
 
     public abstract class BasePart<E, M> : BasePart where E : BaseEntity<M> where M : BaseModel
@@ -82,33 +24,89 @@ namespace Akasha
         protected E Entity { get; set; }
         protected M Model { get; set; }
 
-        public override void RegistEntity(object entity) => RegisterEntity(entity as E);
-        public override void RegistModel(object model) => RegisterModel(model as M);
-
-        protected T GetSiblingPart<T>() where T : BasePart
+        private void Awake()
         {
-            return Entity?.GetPart<T>();
+            enabled = false;
+            AtAwake();
+        }
+        public override void CallSave()
+        {
+            AtSave();
+        }
+        public override void CallLoad()
+        {
+            AtLoad();
+        }
+        public override void CallDestroy()
+        {
+            AtDestroy();
+        }
+        public override void CallDeinit()
+        {
+            AtDeinit();
+        }
+        public override void CallDisable()
+        {
+            AtDisable();
+        }
+        public override void CallLateStart()
+        {
+            AtLateStart();
+        }
+        public override void CallStart()
+        {
+            AtStart();
+        }
+        public override void CallInit()
+        {
+            AtInit();
+        }
+        public override void CallEnable()
+        {
+            AtEnable();
         }
 
-        protected void CallPartMethod<T>(string methodName, params object[] parameters)
-            where T : BasePart
+        public override void CallPoolInit()
         {
-            var part = GetSiblingPart<T>();
-            if (part != null)
+            AtPoolInit();
+        }
+
+        public override void CallPoolDeinit()
+        {
+            AtPoolDeinit();
+        }
+
+        public override void RegistEntity(BaseEntity entity)
+        {
+            try
             {
-                var method = part.GetType().GetMethod(methodName);
-                method?.Invoke(part, parameters);
+                Entity = (E)entity;
             }
+            catch (InvalidCastException ex)
+            {
+                Debug.LogError($"EntityRegist failed: Cannot cast {entity.GetType().Name} to {typeof(E).Name}. " +
+                              $"Entity: {entity}, Expected: {typeof(E)}");
+            }
+            Model = Entity.Model;
+            AtModelReady();
         }
 
-        private void RegisterEntity(E entity)
-        {
-            Entity = entity;
-        }
+        protected virtual void AtEnable() { }
+        protected virtual void AtAwake() { }
+        protected virtual void AtStart() { }
+        protected virtual void AtInit() { }
+        protected virtual void AtLateStart() { }
 
-        private void RegisterModel(M model)
-        {
-            Model = model;
-        }
+        protected virtual void AtModelReady() { }
+
+        protected virtual void AtSave() { }
+        protected virtual void AtLoad() { }
+
+        protected virtual void AtDeinit() { }
+        protected virtual void AtDisable() { }
+        protected virtual void AtDestroy() { }
+
+        protected virtual void AtPoolInit() { }
+        protected virtual void AtPoolDeinit() { }
     }
 }

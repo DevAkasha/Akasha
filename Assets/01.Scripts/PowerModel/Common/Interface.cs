@@ -59,6 +59,7 @@ namespace Akasha
     public interface IModelOwner<M> : IModelOwner where M : BaseModel // 모델을 소유하는 엔티티 인터페이스
     {
         M Model { get; }
+        M GetModel();
     }
 
     public interface IUIComponent

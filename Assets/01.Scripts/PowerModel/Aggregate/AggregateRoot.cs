@@ -77,7 +77,6 @@ namespace Akasha
 
         private Transform cachedTransform;
         private bool isInitialized = false;
-        private static int nextInstanceId = 1;
 
         public int InstanceId => instanceId;
         public Transform CachedTransform => cachedTransform ?? (cachedTransform = transform);
@@ -89,59 +88,22 @@ namespace Akasha
         {
             InitializeIdentity();
             RegisterToManager();
-            OnAwake();
-        }
-
-        protected virtual void Start()
-        {
-            if (!isInitialized)
-            {
-                PerformInitialization();
-            }
-            OnStart();
         }
 
         protected virtual void OnDestroy()
         {
-            if (isInitialized)
-            {
-                PerformDeinitialization();
-            }
             UnregisterFromManager();
-            OnDestroyed();
         }
 
         private void InitializeIdentity()
         {
             if (instanceId == -1)
             {
-                instanceId = nextInstanceId++;
+                instanceId = GetInstanceID();
             }
 
             cachedTransform = transform;
             objectMetadata.CaptureFromObject(this);
-        }
-
-        public virtual void PerformInitialization()
-        {
-            if (isInitialized) return;
-
-            OnBeforeInitialize();
-            OnInitialize();
-            OnAfterInitialize();
-
-            isInitialized = true;
-        }
-
-        public virtual void PerformDeinitialization()
-        {
-            if (!isInitialized) return;
-
-            OnBeforeDeinitialize();
-            OnDeinitialize();
-            OnAfterDeinitialize();
-
-            isInitialized = false;
         }
 
         private void RegisterToManager()
@@ -161,21 +123,10 @@ namespace Akasha
             return GetAggregateType() switch
             {
                 AggregateType.Controller => GameManager.Controllers,
-                AggregateType.MController or AggregateType.EMController => GameManager.ModelControllers,
                 AggregateType.Presenter => GameManager.Presenters,
                 _ => null
             };
         }
-
-        protected virtual void OnAwake() { }
-        protected virtual void OnStart() { }
-        protected virtual void OnBeforeInitialize() { }
-        protected virtual void OnInitialize() { }
-        protected virtual void OnAfterInitialize() { }
-        protected virtual void OnBeforeDeinitialize() { }
-        protected virtual void OnDeinitialize() { }
-        protected virtual void OnAfterDeinitialize() { }
-        protected virtual void OnDestroyed() { }
 
         public void SetInPool(bool inPool)
         {

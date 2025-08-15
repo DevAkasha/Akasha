@@ -1,7 +1,6 @@
 ﻿using System;
 using UnityEngine;
 
-
 namespace Akasha
 {
     public enum AggregateType
@@ -68,31 +67,51 @@ namespace Akasha
         }
     }
 
-    public abstract class AggregateRoot : MonoBehaviour
+    public interface IPoolable
+    {
+        void OnSpawnFromPool();
+        void OnReturnToPool();
+        void ResetPoolableState();
+    }
+
+    public abstract class AggregateRoot : MonoBehaviour, IPoolable
     {
         public ObjectMetadata objectMetadata = new ObjectMetadata();
         [SerializeField] private int instanceId = -1;
-        public bool isInPool = false;
-        public bool isSceneCreated = true;
+        [SerializeField] private bool isInPool = false;
+        [SerializeField] private bool isSceneCreated = true;
+        [SerializeField] protected bool isPoolObject = false;
 
         private Transform cachedTransform;
         private bool isInitialized = false;
+        private TransformData originalTransformData;
+        private bool isSpawningFromPool = false;
+        private bool isReturningToPool = false;
 
         public int InstanceId => instanceId;
         public Transform CachedTransform => cachedTransform ?? (cachedTransform = transform);
         public bool IsInitialized => isInitialized;
+        public bool IsInPool => isInPool;
+        public bool IsPoolObject => isPoolObject;
+        public bool IsSceneCreated => isSceneCreated;
+        public bool IsSpawningFromPool => isSpawningFromPool;
+        public bool IsReturningToPool => isReturningToPool;
 
         public abstract AggregateType GetAggregateType();
 
         protected virtual void Awake()
         {
             InitializeIdentity();
+            DeterminePoolStatus();
             RegisterToManager();
         }
 
         protected virtual void OnDestroy()
         {
-            UnregisterFromManager();
+            if (!isInPool)
+            {
+                UnregisterFromManager();
+            }
         }
 
         private void InitializeIdentity()
@@ -104,6 +123,19 @@ namespace Akasha
 
             cachedTransform = transform;
             objectMetadata.CaptureFromObject(this);
+            originalTransformData = TransformData.FromTransform(cachedTransform);
+            isInitialized = true;
+        }
+
+        private void DeterminePoolStatus()
+        {
+            var containerManager = GetComponentInParent<ContainerManager<AggregateRoot>>();
+            if (containerManager != null)
+            {
+                isPoolObject = true;
+                isSceneCreated = false;
+                DontDestroyOnLoad(gameObject);
+            }
         }
 
         private void RegisterToManager()
@@ -122,7 +154,7 @@ namespace Akasha
         {
             return GetAggregateType() switch
             {
-                AggregateType.Controller => GameManager.Controllers,
+                AggregateType.Controller or AggregateType.MController or AggregateType.EMController => GameManager.Controllers,
                 AggregateType.Presenter => GameManager.Presenters,
                 _ => null
             };
@@ -130,6 +162,8 @@ namespace Akasha
 
         public void SetInPool(bool inPool)
         {
+            if (isInPool == inPool) return;
+
             isInPool = inPool;
             OnPoolStateChanged(inPool);
         }
@@ -137,13 +171,44 @@ namespace Akasha
         protected virtual void OnPoolStateChanged(bool inPool)
         {
             if (inPool)
-                OnEnterPool();
+                OnReturnToPool();
             else
-                OnExitPool();
+                OnSpawnFromPool();
+        }
+
+        public virtual void OnSpawnFromPool()
+        {
+            isSpawningFromPool = true;
+            gameObject.SetActive(true);
+            OnExitPool();
+            isSpawningFromPool = false;
+        }
+
+        public virtual void OnReturnToPool()
+        {
+            isReturningToPool = true;
+            ResetPoolableState();
+            gameObject.SetActive(false);
+            OnEnterPool();
+            isReturningToPool = false;
+        }
+
+        public virtual void ResetPoolableState()
+        {
+            originalTransformData.ApplyTo(cachedTransform);
         }
 
         protected virtual void OnEnterPool() { }
         protected virtual void OnExitPool() { }
+
+        public void ForceReturnToPool()
+        {
+            var manager = GetResponsibleManager();
+            if (manager is ContainerManager<AggregateRoot> containerManager)
+            {
+                containerManager.ReturnToPool(this);
+            }
+        }
 
         public string GetAggregateId()
         {

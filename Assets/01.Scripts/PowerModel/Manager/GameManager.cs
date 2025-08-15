@@ -145,16 +145,98 @@ namespace Akasha
             return allManagers.FirstOrDefault(m => m is T) as T;
         }
 
-        public T GetController<T>() where T : EMController
+        public T GetController<T>() where T : BaseController
         {
             return Controllers?.GetController<T>();
         }
 
-
-
         public T GetPresenter<T>() where T : BasePresenter
         {
             return Presenters?.GetPresenter<T>();
+        }
+
+        public T SpawnController<T>() where T : BaseController
+        {
+            return Controllers?.SpawnController<T>();
+        }
+
+        public T SpawnController<T>(Vector3 position, Quaternion rotation) where T : BaseController
+        {
+            return Controllers?.SpawnController<T>(position, rotation);
+        }
+
+        public T SpawnController<T>(Transform parent) where T : BaseController
+        {
+            return Controllers?.SpawnController<T>(parent);
+        }
+
+        public T SpawnControllerFromPrefab<T>(T prefab) where T : BaseController
+        {
+            return Controllers?.SpawnControllerFromPrefab(prefab);
+        }
+
+        public T SpawnControllerOrCreate<T>(T prefab) where T : BaseController
+        {
+            return Controllers?.SpawnControllerOrCreate(prefab);
+        }
+
+        public T SpawnPresenter<T>() where T : BasePresenter
+        {
+            return Presenters?.SpawnPresenter<T>();
+        }
+
+        public T SpawnPresenter<T>(Vector3 position, Quaternion rotation) where T : BasePresenter
+        {
+            return Presenters?.SpawnPresenter<T>(position, rotation);
+        }
+
+        public T SpawnPresenter<T>(Transform parent) where T : BasePresenter
+        {
+            return Presenters?.SpawnPresenter<T>(parent);
+        }
+
+        public T SpawnPresenterFromPrefab<T>(T prefab) where T : BasePresenter
+        {
+            return Presenters?.SpawnPresenterFromPrefab(prefab);
+        }
+
+        public T SpawnPresenterOrCreate<T>(T prefab) where T : BasePresenter
+        {
+            return Presenters?.SpawnPresenterOrCreate(prefab);
+        }
+
+        public bool ReturnToPool(AggregateRoot aggregate)
+        {
+            IAggregateManager manager = aggregate.GetAggregateType() switch
+            {
+                AggregateType.Controller or AggregateType.MController or AggregateType.EMController => Controllers,
+                AggregateType.Presenter => Presenters,
+                _ => null
+            };
+
+            if (manager is ContainerManager<AggregateRoot> containerManager)
+            {
+                return containerManager.ReturnToPool(aggregate);
+            }
+
+            return false;
+        }
+
+        public bool ReturnController(BaseController controller)
+        {
+            return Controllers?.ReturnController(controller) ?? false;
+        }
+
+        public bool ReturnPresenter(BasePresenter presenter)
+        {
+            return Presenters?.ReturnPresenter(presenter) ?? false;
+        }
+
+        public void ReturnAllToPool()
+        {
+            Controllers?.ReturnAllControllers();
+            Presenters?.ReturnAllPresenters();
+            Debug.Log("[GameManager] Returned all objects to pools");
         }
 
         public void ShowAllPresenters()
@@ -167,6 +249,33 @@ namespace Akasha
         {
             Presenters?.HideAll();
             Debug.Log("[GameManager] Hid all presenters");
+        }
+
+        public void PrewarmControllerPool<T>(T prefab, int count) where T : BaseController
+        {
+            Controllers?.PrewarmControllerPool(prefab, count);
+        }
+
+        public void PrewarmPresenterPool<T>(T prefab, int count) where T : BasePresenter
+        {
+            Presenters?.PrewarmPresenterPool(prefab, count);
+        }
+
+        public void ClearControllerPool<T>() where T : BaseController
+        {
+            Controllers?.ClearControllerPool<T>();
+        }
+
+        public void ClearPresenterPool<T>() where T : BasePresenter
+        {
+            Presenters?.ClearPresenterPool<T>();
+        }
+
+        public void ClearAllPools()
+        {
+            Controllers?.ClearAllPools();
+            Presenters?.ClearAllPools();
+            Debug.Log("[GameManager] Cleared all pools");
         }
 
         private void RegisterSceneEvents()
@@ -227,12 +336,14 @@ namespace Akasha
             {
                 stats["Controllers"] = Controllers.RegisteredCount;
                 stats["Pooled Controllers"] = Controllers.PooledCount;
+                stats["Active Controllers"] = Controllers.ActiveCount;
             }
 
             if (Presenters != null)
             {
                 stats["Presenters"] = Presenters.RegisteredCount;
                 stats["Pooled Presenters"] = Presenters.PooledCount;
+                stats["Active Presenters"] = Presenters.ActiveCount;
                 stats["Total Views"] = Presenters.GetTotalViewCount();
             }
 
@@ -260,19 +371,16 @@ namespace Akasha
         [SerializeField] private EffectManager effectManager;
         [SerializeField] private EffectRunner effectRunner;
         [SerializeField] private ModifierManager modifierManager;
-    
 
         public static EffectManager Effect => Instance?.effectManager;
         public static EffectRunner EffectRunner => Instance?.effectRunner;
         public static ModifierManager Modifier => Instance?.modifierManager;
-
 
         partial void InitializeProject()
         {
             effectManager = GetManager<EffectManager>();
             effectRunner = GetManager<EffectRunner>();
             modifierManager = GetManager<ModifierManager>();
- 
 
             if (modifierManager == null)
             {

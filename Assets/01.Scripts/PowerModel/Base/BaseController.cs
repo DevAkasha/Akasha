@@ -6,31 +6,24 @@ namespace Akasha
 {
     public abstract class BaseController : AggregateRoot
     {
-
-
-    }
-
-    public abstract class Controller : BaseController, IRxOwner, IRxCaller
-    {
-        public bool isInit = false;
-        public bool isPoolObject = false;
-        public bool isPoolInit = false;
-
-        private readonly HashSet<RxBase> trackedRxVars = new();
-
-        public bool IsRxVarOwner => true;
-
-        public bool IsRxAllOwner => false;
-
-        public bool IsLogicalCaller => true;
-
-        public bool IsMultiRolesCaller => true;
-
-        public bool IsFunctionalCaller => false;
         public override AggregateType GetAggregateType()
         {
             return AggregateType.Controller;
         }
+    }
+
+    public abstract class Controller : BaseController, IRxOwner, IRxCaller
+    {
+        private bool isInit = false;
+        private bool isPoolInit = false;
+        private readonly HashSet<RxBase> trackedRxVars = new();
+
+        public bool IsRxVarOwner => true;
+        public bool IsRxAllOwner => false;
+        public bool IsLogicalCaller => true;
+        public bool IsMultiRolesCaller => true;
+        public bool IsFunctionalCaller => false;
+
         protected override void Awake()
         {
             base.Awake();
@@ -40,15 +33,16 @@ namespace Akasha
         private void OnEnable()
         {
             if (!isInit) return;
-            if (isPoolObject)
+
+            if (IsPoolObject && IsSpawningFromPool)
             {
                 OnPoolInit();
                 AtPoolInit();
             }
-            else
+            else if (!IsPoolObject || !IsInPool)
             {
                 AtEnable();
-            }          
+            }
         }
 
         private void OnPoolInit()
@@ -61,22 +55,21 @@ namespace Akasha
             OnInit();
             AtInit();
             AtStart();
-            OnEnable();
             AtLateStart();
         }
 
         private void OnInit()
         {
-            isInit = true;           
-        }     
+            isInit = true;
+        }
 
         protected void OnDisable()
         {
-            if (!isPoolObject)
+            if (!IsPoolObject || !IsReturningToPool)
             {
                 AtDisable();
             }
-            else if(isPoolInit)
+            else if (isPoolInit && IsReturningToPool)
             {
                 OnPoolDeinit();
                 AtPoolDeinit();
@@ -93,12 +86,39 @@ namespace Akasha
             OnDeinit();
             AtDeinit();
             AtDestroy();
+            base.OnDestroy();
         }
 
         private void OnDeinit()
         {
             isInit = false;
             Unload();
+        }
+
+        public override void OnSpawnFromPool()
+        {
+            base.OnSpawnFromPool();
+            if (isInit)
+            {
+                OnPoolInit();
+                AtPoolInit();
+            }
+        }
+
+        public override void OnReturnToPool()
+        {
+            if (isPoolInit)
+            {
+                OnPoolDeinit();
+                AtPoolDeinit();
+            }
+            base.OnReturnToPool();
+        }
+
+        public override void ResetPoolableState()
+        {
+            base.ResetPoolableState();
+            isPoolInit = false;
         }
 
         public void RegisterRx(RxBase rx)
@@ -116,25 +136,25 @@ namespace Akasha
         }
 
         protected virtual void AtAwake() { }
-
         protected virtual void AtInit() { }
         protected virtual void AtDeinit() { }
-
         protected virtual void AtStart() { }
         protected virtual void AtLateStart() { }
-
         protected virtual void AtEnable() { }
         protected virtual void AtDisable() { }
-
         protected virtual void AtPoolInit() { }
         protected virtual void AtPoolDeinit() { }
-
         protected virtual void AtDestroy() { }
     }
 
     public abstract class MController : BaseController, IModelOwner
     {
         public abstract BaseModel GetBaseModel();
+
+        public override AggregateType GetAggregateType()
+        {
+            return AggregateType.MController;
+        }
     }
 
     public abstract class MController<M> : MController, IModelOwner<M>, IRxCaller where M : BaseModel
@@ -142,22 +162,15 @@ namespace Akasha
         public M Model { get; set; }
 
         public override BaseModel GetBaseModel() => Model;
-
         public M GetModel() => Model;
 
-        public bool isInit = false;
-        public bool isPoolObject = false;
-        public bool isPoolInit = false;
+        private bool isInit = false;
+        private bool isPoolInit = false;
 
         public bool IsLogicalCaller => true;
-
         public bool IsMultiRolesCaller => false;
-
         public bool IsFunctionalCaller => true;
-        public override AggregateType GetAggregateType()
-        {
-            return AggregateType.MController;
-        }
+
         protected override void Awake()
         {
             base.Awake();
@@ -169,12 +182,13 @@ namespace Akasha
         private void OnEnable()
         {
             if (!isInit) return;
-            if (isPoolObject)
+
+            if (IsPoolObject && IsSpawningFromPool)
             {
                 OnPoolInit();
                 AtPoolInit();
             }
-            else
+            else if (!IsPoolObject || !IsInPool)
             {
                 AtEnable();
             }
@@ -185,7 +199,6 @@ namespace Akasha
             OnInit();
             AtInit();
             AtStart();
-            OnEnable();
             AtLateStart();
         }
 
@@ -201,11 +214,11 @@ namespace Akasha
 
         protected void OnDisable()
         {
-            if (!isPoolObject)
+            if (!IsPoolObject)
             {
                 AtDisable();
             }
-            else if(isPoolInit)
+            else if (isPoolInit && IsInPool)
             {
                 OnPoolDeinit();
                 AtPoolDeinit();
@@ -222,13 +235,43 @@ namespace Akasha
             OnDeinit();
             AtDeinit();
             AtDestroy();
+            base.OnDestroy();
         }
 
         private void OnDeinit()
         {
             isInit = false;
         }
-        
+
+        public override void OnSpawnFromPool()
+        {
+            base.OnSpawnFromPool();
+            if (isInit)
+            {
+                OnPoolInit();
+                AtPoolInit();
+            }
+        }
+
+        public override void OnReturnToPool()
+        {
+            if (isPoolInit)
+            {
+                OnPoolDeinit();
+                AtPoolDeinit();
+            }
+            AtSave();
+            base.OnReturnToPool();
+        }
+
+        public override void ResetPoolableState()
+        {
+            base.ResetPoolableState();
+            isPoolInit = false;
+            Model?.Unload();
+            Model = SetModel();
+        }
+
         public void CallSave()
         {
             AtSave();
@@ -240,32 +283,31 @@ namespace Akasha
         }
 
         protected virtual void AtAwake() { }
-
         protected virtual void AtInit() { }
         protected virtual void AtDeinit() { }
-
         protected virtual void AtStart() { }
         protected virtual void AtLateStart() { }
-
         protected virtual void AtEnable() { }
         protected virtual void AtDisable() { }
-
         protected virtual void AtDestroy() { }
-
         protected virtual void AtPoolInit() { }
         protected virtual void AtPoolDeinit() { }
-
         protected abstract M SetModel();
         protected virtual void AtModelReady() { }
         protected virtual void AtSave() { }
         protected virtual void AtLoad() { }
-        
     }
+
     public abstract class EMController : BaseController, IModelOwner
     {
         public abstract BaseModel GetBaseModel();
         public abstract void RegistEntity(BaseEntity baseEntity);
         public abstract void CallModelReady();
+
+        public override AggregateType GetAggregateType()
+        {
+            return AggregateType.EMController;
+        }
     }
 
     public abstract class EMController<E, M> : EMController, IRxCaller
@@ -274,11 +316,8 @@ namespace Akasha
         public E Entity { get; set; }
         public M Model { get; set; }
 
-        public bool isInit = false;
-
-        protected bool isPoolObject = false;
-
-        public bool isPoolInit = false;
+        private bool isInit = false;
+        private bool isPoolInit = false;
 
         bool IRxCaller.IsLogicalCaller => true;
         bool IRxCaller.IsMultiRolesCaller => false;
@@ -286,10 +325,7 @@ namespace Akasha
 
         public override BaseModel GetBaseModel() => Model;
         public M GetModel() => Model;
-        public override AggregateType GetAggregateType()
-        {
-            return AggregateType.EMController;
-        }
+
         public override void RegistEntity(BaseEntity entity)
         {
             try
@@ -318,15 +354,16 @@ namespace Akasha
         private void OnEnable()
         {
             if (!isInit) return;
-            if (isPoolObject)
+
+            if (IsPoolObject && IsSpawningFromPool)
             {
-                Entity.CallPoolInit();
+                Entity?.CallPoolInit();
                 OnPoolInit();
                 AtPoolInit();
             }
-            else
+            else if (!IsPoolObject || !IsInPool)
             {
-                Entity.CallEnable();
+                Entity?.CallEnable();
                 AtEnable();
             }
         }
@@ -344,9 +381,8 @@ namespace Akasha
             AtInit();
             Entity.CallStart();
             AtStart();
-            OnEnable();
             Entity.CallLateStart();
-            AtLateStart();     
+            AtLateStart();
         }
 
         private void OnInit()
@@ -357,17 +393,18 @@ namespace Akasha
         protected void OnDisable()
         {
             if (!isInit) return;
-            if (!isPoolObject)
+
+            if (!IsPoolObject || !IsReturningToPool)
             {
-                Entity.CallDisable();
+                Entity?.CallDisable();
                 AtDisable();
             }
-            else if (isPoolInit)
+            else if (isPoolInit && IsReturningToPool)
             {
-                Entity.CallPoolDeinit();
+                Entity?.CallPoolDeinit();
                 OnPoolDeinit();
                 AtPoolDeinit();
-            }            
+            }
         }
 
         private void OnPoolDeinit()
@@ -377,16 +414,46 @@ namespace Akasha
 
         protected override void OnDestroy()
         {
-            Entity.CallDeinit();
+            Entity?.CallDeinit();
             OnDeinit();
             AtDeinit();
-            Entity.CallDestroy();
+            Entity?.CallDestroy();
             AtDestroy();
+            base.OnDestroy();
         }
 
         private void OnDeinit()
         {
-            isInit = false;   
+            isInit = false;
+        }
+
+        public override void OnSpawnFromPool()
+        {
+            base.OnSpawnFromPool();
+            if (isInit)
+            {
+                Entity?.CallPoolInit();
+                OnPoolInit();
+                AtPoolInit();
+            }
+        }
+
+        public override void OnReturnToPool()
+        {
+            if (isPoolInit)
+            {
+                Entity?.CallPoolDeinit();
+                OnPoolDeinit();
+                AtPoolDeinit();
+            }
+            AtSave();
+            base.OnReturnToPool();
+        }
+
+        public override void ResetPoolableState()
+        {
+            base.ResetPoolableState();
+            isPoolInit = false;
         }
 
         public void OnSave()
@@ -400,19 +467,15 @@ namespace Akasha
         }
 
         protected virtual void AtAwake() { }
-
         protected virtual void AtInit() { }
         protected virtual void AtStart() { }
         protected virtual void AtLateStart() { }
         protected virtual void AtEnable() { }
-
         protected virtual void AtDisable() { }
         protected virtual void AtDeinit() { }
         protected virtual void AtDestroy() { }
-
         protected virtual void AtPoolInit() { }
         protected virtual void AtPoolDeinit() { }
-
         protected virtual void AtModelReady() { }
         protected virtual void AtSave() { }
         protected virtual void AtLoad() { }

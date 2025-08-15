@@ -3,68 +3,31 @@ using System.Collections.Generic;
 using Akasha;
 using UnityEngine;
 
-public class TestEntity : BaseEntity<TestModel>
+public class TestEntity : BaseEntity<TestUnitModel>
 {
     protected override void AtAwake()
     {
-        Debug.Log("TestEntity AtAwake");
+        Debug.Log($"[Entity] AtAwake");
     }
 
-    protected override void AtInit()
+    protected override TestUnitModel SetupModel()
     {
-        Debug.Log("TestEntity AtInit");
-    }
-    protected override void AtStart()
-    {
-        Debug.Log("TestEntity AtStart");
-    }
-    protected override void AtLateStart()
-    {
-        Debug.Log("TestEntity AtLateStart");
+        return new TestUnitModel($"Entity_{GetInstanceID()}");
     }
 
     protected override void AtModelReady()
     {
-        Debug.Log("TestEntity AtModelReady");
-    }
-    protected override void AtSave()
-    {
-        Debug.Log("TestEntity AtSave");
-    }
-    protected override void AtLoad()
-    {
-        Debug.Log("TestEntity AtLoad");
+        Debug.Log($"[Entity] Model Ready - Unit: {Model.unitName.Value}");
     }
 
-    protected override void AtEnable()
+    protected override void AtInit()
     {
-        Debug.Log("TestEntity AtEnable");
-    }
-    protected override void AtDisable()
-    {
-        Debug.Log("TestEntity AtDisable");
-    }
-    protected override void AtPoolInit()
-    {
-        Debug.Log("TestEntity AtPoolInit");
-    }
-    protected override void AtPoolDeinit()
-    {
-        Debug.Log("TestEntity AtPoolDeinit");
+        Debug.Log($"[Entity] AtInit - Entity initialized");
     }
 
-    protected override void AtDeinit()
+    public void TestPartInteraction()
     {
-        Debug.Log("TestEntity AtDeinit");
-    }
-    protected override void AtDestroy()
-    {
-        Debug.Log("TestEntity AtDestroy");
-    }
-
-    protected override TestModel SetupModel()
-    {
-        Debug.Log("TestEntity SetupModel");
-        return new TestModel();
+        var testPart = GetPart<TestEntityPart>();
+        testPart?.DoSomething();
     }
 }
